@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Torn Toolkit
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      0.4.1
-// @description  Status, travel and foreign stock, training ratios, target estimates, jump planner and market values for Torn. Read-only, uses your own API key.
+// @version      0.4.2
+// @description  Cooldown timers, travel and foreign stock, training ratios, target estimates, jump planner and market values for Torn. Read-only, uses your own API key.
 // @author       fl0w-development
 // @license      MIT
 // @match        https://www.torn.com/*
@@ -467,7 +467,7 @@
   // Browser side
   // ===========================================================================
 
-  const VERSION = '0.4.1';
+  const VERSION = '0.4.2';
   const API = 'https://api.torn.com/v2/';
   // Torn PDA (mobile app) replaces this placeholder with the user's key.
   const PDA_KEY = '###PDA-APIKEY###';
@@ -844,7 +844,7 @@
     if (!getKey()) {
       bodyEl.append(h('div', { class: 'tt-section' },
         h('div', { class: 'tt-big' }, 'Welcome'),
-        h('p', { class: 'tt-sub' }, 'Add your Torn API key to see your bars, cooldowns, market values and target estimates. Your key stays in your browser.'),
+        h('p', { class: 'tt-sub' }, 'Add your Torn API key to see cooldowns, market values and target estimates. Your key stays in your browser.'),
         h('div', { class: 'tt-actions' }, h('button', { class: 'tt-btn', type: 'button', onclick: openSettings }, 'Add API key'))));
       setFoot('', '');
       return;
@@ -864,7 +864,6 @@
 
   // ---------------------------------------------------------------- Status view
   const statusState = { data: null, fetchedAt: 0, error: null };
-  const BAR_COLORS = { energy: 'var(--energy)', nerve: 'var(--nerve)', happy: 'var(--happy)', life: 'var(--life)' };
   const cap = (s) => s[0].toUpperCase() + s.slice(1);
 
   async function refreshStatus() {
@@ -881,7 +880,6 @@
     }
     checkTimers();
     if (activeTab === 'status') renderActive();
-    updateMini();
   }
 
   function liveTimers() {
@@ -913,14 +911,8 @@
     fire.forEach((t) => notify('Torn Toolkit', t.msg));
   }
 
-  function updateMini() {
-    const d = statusState.data;
-    if (!d || !d.bars) { miniEl.textContent = ''; return; }
-    miniEl.textContent = `E ${d.bars.energy.current}/${d.bars.energy.maximum} · N ${d.bars.nerve.current}/${d.bars.nerve.maximum}`;
-  }
-
   views.status = {
-    title: 'Status',
+    title: 'Timers',
     render(el) {
       const { data: d, error } = statusState;
       if (error && error.kind !== 'backoff') el.append(notice(error.message, 'err'));
@@ -928,22 +920,6 @@
       if (!d) { if (!error) el.append(h('p', { class: 'tt-sub' }, 'Loading…')); return; }
       const elapsed = (Date.now() - statusState.fetchedAt) / 1000;
       const left = (s) => Math.max(0, (Number(s) || 0) - elapsed);
-
-      const bars = h('div', { class: 'tt-section' });
-      for (const b of ['energy', 'nerve', 'happy', 'life']) {
-        const bar = d.bars && d.bars[b];
-        if (!bar) continue;
-        const full = left(bar.full_time);
-        const pct = bar.maximum ? Math.min(100, (bar.current / bar.maximum) * 100) : 0;
-        bars.append(h('div', { class: 'tt-bar' },
-          h('div', { class: 'tt-bar-top' },
-            h('span', {}, h('span', { class: 'tt-bar-name' }, cap(b)), ' ',
-              h('span', { class: 'tt-sub' }, `${formatNumber(bar.current)} / ${formatNumber(bar.maximum)}`)),
-            h('span', { class: full ? 'tt-sub' : 'tt-ok' }, bar.current >= bar.maximum ? 'Full' : full ? `full in ${formatCountdown(full)}` : 'Full')),
-          h('div', { class: 'tt-track', role: 'progressbar', 'aria-label': cap(b), 'aria-valuemin': '0', 'aria-valuemax': String(bar.maximum), 'aria-valuenow': String(bar.current) },
-            h('div', { class: 'tt-fill', style: `width:${pct}%;background:${BAR_COLORS[b]}` }))));
-      }
-      el.append(bars);
 
       const cds = h('div', { class: 'tt-section' }, h('div', { class: 'tt-section-title' }, 'Cooldowns'));
       for (const k of ['drug', 'booster', 'medical']) {
@@ -1617,7 +1593,7 @@
           msg),
         h('div', { class: 'tt-section' },
           h('div', { class: 'tt-section-title' }, 'Features'),
-          check('hud', 'Status panel', 'bars, cooldowns, travel, education'),
+          check('hud', 'Timers and activity', 'cooldowns, travel, education'),
           check('market', 'Market values', 'badge next to item images'),
           check('target', 'Target estimate', 'profile and attack pages'),
           check('jump', 'Gym tab', 'gym page: jump planner'),
