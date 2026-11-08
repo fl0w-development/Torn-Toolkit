@@ -8,7 +8,7 @@ A clean, read-only helper for [Torn](https://www.torn.com) that keeps what you c
 |---|---|---|
 | **Status** | Every page | Energy, nerve, happy and life with "full in" timers; drug, booster and medical cooldowns; travel and education. Optional notifications when energy or nerve fills, a cooldown ends, you land, or a course finishes. |
 | **Travel** | Every page | Ranks every country by profit per hour for your travel type and carrying capacity. Shows the best items, cost, flight time and when you would be back (TCT). While abroad it lists the best buys in that country. It learns your real flight times, can cap spending per trip, and warns when your energy would fill while you are away. |
-| **Live foreign stock** | Travel tab | *Optional, off by default.* Shows how many of each item are on the shelves abroad, limits suggestions to what is actually in stock, and records restocks and empty shelves it sees. |
+| **Live foreign stock** | Travel tab | On by default; can be turned off. Shows how many of each item are on the shelves abroad, limits suggestions to what is actually in stock, and records restocks and empty shelves it sees. |
 | **Target** | Profile and attack pages | Estimated battle stat range, level, rank, status, last action, networth, attacks won/lost, Xanax taken and crimes. |
 | **Jump planner** | Gym | Reads your gym, its dots and energy per train, your stats and happy. Compares normal training against a happy jump (Ecstasy) or choco jump (candy), with the cheapest candy, its cost and your booster cooldown limit. |
 | **Market values** | Every page | A small badge with the market value next to item images. |
@@ -30,7 +30,7 @@ These are Torn's [API Terms of Service](https://www.torn.com/api.html) fields:
 | | |
 |---|---|
 | **Data storage** | Only locally, in your browser. Game data is cached for 1 minute to 24 hours. |
-| **Data sharing** | Nobody. The optional live stock only downloads YATA's public list and sends nothing. |
+| **Data sharing** | Nobody. Live foreign stock downloads YATA's public list and sends nothing to it. |
 | **Purpose of use** | Not eligible: only you see the data. |
 | **Key storage & sharing** | Stored locally, not shared. Sent only to `api.torn.com`, in a request header. |
 | **Key access level** | Limited Access. Minimal also works; you then type in your battle stats and travel capacity yourself. |
@@ -43,9 +43,9 @@ These are Torn's [API Terms of Service](https://www.torn.com/api.html) fields:
 - **Rate limit:** it stays far below Torn's limit of 100 requests a minute and backs off when the API asks it to.
 - **Bad keys:** an invalid, paused or disabled key is removed as soon as Torn reports it, so it cannot get your IP blocked.
 
-### Optional third-party service
+### Third-party service
 
-**Live foreign stock** is off unless you turn it on. When enabled, the script downloads [YATA](https://yata.yt)'s public stock list every 5 minutes. No API key or player data is sent; like any website, YATA can see your IP address. See [YATA's terms of service](https://yata.yt/tos).
+**Live foreign stock** is on by default; turn it off in settings if you prefer. While it is on, the script downloads [YATA](https://yata.yt)'s public stock list every 5 minutes. No API key or player data is sent; like any website, YATA can see your IP address. See [YATA's terms of service](https://yata.yt/tos).
 
 ## Accuracy
 

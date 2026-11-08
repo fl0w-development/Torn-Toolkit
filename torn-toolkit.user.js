@@ -29,8 +29,9 @@
  *  - Requests ask only for the selections each feature needs, are cached and
  *    shared between tabs, and stay far below the 100 requests/minute limit.
  *  - Invalid or disabled keys are removed as soon as the API reports them.
- *  - Optional, off by default: live foreign stock from YATA (yata.yt). Only
- *    YATA's public stock list is downloaded; no key or player data is sent.
+ *  - Live foreign stock comes from YATA (yata.yt), on by default and can be
+ *    turned off in settings. Only YATA's public stock list is downloaded; no
+ *    key or player data is sent.
  */
 
 (function () {
@@ -357,7 +358,7 @@
   };
 
   const DEFAULTS = {
-    hud: true, market: true, target: true, jump: true, travel: true, foreignStock: false, notify: false,
+    hud: true, market: true, target: true, jump: true, travel: true, foreignStock: true, notify: false,
     boosterCapHours: 24, travelMethod: 'auto', travelCapacity: 0, travelBudget: 0, collapsed: false, pos: null,
   };
   const settings = Object.assign({}, DEFAULTS, store.get('settings', {}));
@@ -1227,7 +1228,7 @@
 
     const tos = h('table', { class: 'tt-tos' }, h('tbody', {},
       [['Data storage', 'Only locally, in your browser. Game data is cached for 1 minute to 24 hours'],
-        ['Data sharing', 'Nobody. Optional live stock only downloads YATA’s public list and sends nothing'],
+        ['Data sharing', 'Nobody. Live foreign stock downloads YATA’s public list and sends nothing to it'],
         ['Purpose of use', 'Not eligible – only you see the data'],
         ['Key storage & sharing', 'Stored locally / not shared. Sent only to api.torn.com'],
         ['Key access level', 'Limited Access. Minimal also works; you then type in your battle stats and travel capacity yourself'],
@@ -1275,7 +1276,7 @@
           check('target', 'Target estimate', 'profile and attack pages'),
           check('jump', 'Jump planner', 'gym page'),
           check('travel', 'Travel helper', 'best trips, buys abroad, landing times'),
-          check('foreignStock', 'Live foreign stock', 'optional, from YATA'),
+          check('foreignStock', 'Live foreign stock', 'from YATA'),
           h('div', { class: 'tt-sub', style: 'margin:2px 0 0 23px' },
             'Downloads YATA’s public stock list every 5 minutes. No API key or player data is sent; YATA can see your IP address, like any website. ',
             h('a', { class: 'tt-link', href: 'https://yata.yt/tos', target: '_blank', rel: 'noopener noreferrer' }, 'YATA terms of service')),
