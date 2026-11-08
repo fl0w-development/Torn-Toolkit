@@ -1,0 +1,10 @@
+{
+  "name": "torn-toolkit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Status HUD, market values, target estimates and jump planner userscript for Torn",
+  "scripts": {
+    "test": "node --test"
+  },
+  "license": "MIT"
+}
