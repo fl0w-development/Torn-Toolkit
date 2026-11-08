@@ -418,7 +418,7 @@
           store.set('keyNotice', `Your API key was removed because Torn reported: “${String(error).replace(/\.+$/, '')}”. Add a working key in settings.`);
           throw new ApiError('removedKey', error, code);
         }
-        if (c.action === 'accessLevel') throw new ApiError('access', 'This feature needs a Limited Access key.', code);
+        if (c.action === 'accessLevel') throw new ApiError('access', 'Your API key’s access level is too low for this. Use a Limited Access key.', code);
         store.set('backoffUntil', Date.now() + c.seconds * 1000);
         if (cached) return cached.data;
         throw new ApiError('backoff', `Torn API: ${error}. Retrying in ${formatDuration(c.seconds)}.`, code);
