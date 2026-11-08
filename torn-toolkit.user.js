@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Toolkit
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      0.4.2
+// @version      0.4.3
 // @description  Cooldown timers, travel and foreign stock, training ratios, target estimates, jump planner and market values for Torn. Read-only, uses your own API key.
 // @author       fl0w-development
 // @license      MIT
@@ -54,29 +54,66 @@
   const LEVEL_TRIGGERS = [2, 6, 11, 26, 31, 50, 71, 100];
   const CRIME_TRIGGERS = [100, 5000, 10000, 20000, 30000, 50000];
   const NETWORTH_TRIGGERS = [5e6, 5e7, 5e8, 5e9, 5e10];
+  // These are intentionally broad total-stat brackets, not precision claims.
+  // Torn rank triggers are based on a balance-sensitive score, and old networth
+  // triggers can persist as ghost ranks.
   const STAT_RANGES = [
-    'under 2k', '2k – 25k', '20k – 250k', '200k – 2.5m',
-    '2m – 25m', '20m – 250m', 'over 200m',
+    'under ~2.5k', '~2k – 25k', '~20k – 250k', '~200k – 2.5m',
+    '~2m – 35m', '~20m – 250m', 'over ~200m',
   ];
 
+  function publicStatValue(value) {
+    // API missing fields are not zero. Treat absent, malformed and negative
+    // values as unknown rather than artificially inflating the estimate.
+    if (value === null || value === undefined || value === '') return null;
+    const n = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  }
+
   /**
-   * Community rank-trigger estimate. A player's rank rises with level, crimes,
-   * networth and total battle stats; removing the first three leaves a rough
-   * battle stat bracket. Returns null for an unknown rank.
+   * Conservative rank-trigger estimate, NOT a spy or a measured stat total.
+   *
+   * Rank starts at 0 triggers (Absolute beginner) and rises by one per
+   * unlocked trigger. Subtract only public triggers for which the data
+   * is actually present. The result is a rough *bracket*, not a point estimate.
+   *
+   * A past networth trigger may have been lost (ghost rank), so the resulting
+   * bracket can be inflated even with complete current public stats.
    */
   function estimateStats({ rank, level, crimes, networth }) {
     const title = String(rank || '').replace(/\s+/g, ' ').trim().toLowerCase();
-    let rankIndex = -1;
-    RANKS.forEach((r, i) => {
-      if (title.startsWith(r.toLowerCase()) &&
-          (rankIndex === -1 || r.length > RANKS[rankIndex].length)) rankIndex = i;
-    });
-    if (rankIndex === -1) return null;
-    const count = (list, v) => list.filter((t) => (Number(v) || 0) >= t).length;
-    const triggers = count(LEVEL_TRIGGERS, level) + count(CRIME_TRIGGERS, crimes) +
-      count(NETWORTH_TRIGGERS, networth);
-    const idx = Math.max(0, Math.min(STAT_RANGES.length - 1, rankIndex - triggers - 1));
-    return { bracket: idx, label: STAT_RANGES[idx], rankIndex, triggers };
+    const rankIndex = RANKS.findIndex((name) => name.toLowerCase() === title);
+    if (rankIndex < 0) return { label: 'Unavailable', confidence: 'None', reason: 'Unknown rank', bracket: null };
+
+    const inputs = {
+      level: publicStatValue(level),
+      crimes: publicStatValue(crimes),
+      networth: publicStatValue(networth),
+    };
+    const missing = Object.keys(inputs).filter((key) => inputs[key] === null);
+    if (missing.length) return {
+      label: 'Insufficient public data',
+      confidence: 'None',
+      reason: 'Missing ' + missing.join(', ') + ' from the available API response',
+      missing, rankIndex, bracket: null,
+    };
+    const count = (list, value) => list.filter((threshold) => value >= threshold).length;
+    const triggers = count(LEVEL_TRIGGERS, inputs.level) +
+      count(CRIME_TRIGGERS, inputs.crimes) + count(NETWORTH_TRIGGERS, inputs.networth);
+    const battleTriggers = rankIndex - triggers;
+    if (battleTriggers < 0 || battleTriggers > 6) return {
+      label: 'Unreliable rank data', confidence: 'None', reason:
+        'Rank and current public triggers disagree; historic networth changes or delayed rank updates may be involved',
+      rankIndex, triggers, battleTriggers, bracket: null,
+    };
+    return {
+      bracket: battleTriggers,
+      label: STAT_RANGES[battleTriggers],
+      rankIndex, triggers, battleTriggers,
+      confidence: 'Low',
+      reason: 'Rank-trigger bracket only; stat balance and historic networth ranks can change the true total',
+      source: 'Rank, level, crimes and current networth',
+    };
   }
 
   const GYM_CONSTANTS = {
@@ -467,7 +504,7 @@
   // Browser side
   // ===========================================================================
 
-  const VERSION = '0.4.2';
+  const VERSION = '0.4.3';
   const API = 'https://api.torn.com/v2/';
   // Torn PDA (mobile app) replaces this placeholder with the user's key.
   const PDA_KEY = '###PDA-APIKEY###';
@@ -968,8 +1005,8 @@
       if (!d) { el.append(h('p', { class: 'tt-sub' }, 'Loading…')); return; }
       const p = d.profile || {};
       const ps = d.personalstats || {};
-      const crimes = ps.crimes ? ps.crimes.total : 0;
-      const networth = ps.networth ? ps.networth.total : 0;
+      const crimes = publicStatValue(ps.crimes && ps.crimes.total);
+      const networth = publicStatValue(ps.networth && ps.networth.total);
       const attacks = (ps.attacking && ps.attacking.attacks) || {};
       const est = estimateStats({ rank: p.rank, level: p.level, crimes, networth });
       const statusColor = { green: 'var(--ok)', red: 'var(--err)', blue: 'var(--life)' }[p.status && p.status.color] || 'var(--muted)';
@@ -979,17 +1016,19 @@
           h('span', { class: 'tt-sub' }, `Level ${p.level ?? '?'}`)),
         h('div', { class: 'tt-sub' }, [p.rank, p.title].filter(Boolean).join(' · ')),
         h('div', { class: 'tt-result' },
-          h('div', { class: 'tt-sub' }, 'Estimated battle stats'),
-          h('div', { class: 'tt-big' }, est ? est.label : 'Unknown'))));
+          h('div', { class: 'tt-sub' }, 'Estimated battle stats · rank-trigger method'),
+          h('div', { class: 'tt-big' }, est.label),
+          h('div', { class: 'tt-sub', style: 'margin-top:5px' }, 'Confidence: ' + est.confidence),
+          h('div', { class: 'tt-sub', style: 'margin-top:5px' }, est.reason))));
 
       el.append(h('div', { class: 'tt-section' },
         row('Status', h('span', { class: 'tt-badge' }, h('span', { class: 'tt-dot', style: `background:${statusColor}` }), (p.status && p.status.description) || '?')),
         row('Last action', (p.last_action && p.last_action.relative) || '?'),
-        row('Networth', formatMoney(networth)),
+        row('Networth', networth === null ? 'Not available' : formatMoney(networth)),
         row('Attacks won / lost', `${formatNumber(attacks.won)} / ${formatNumber(attacks.lost)}`),
         row('Xanax taken', formatNumber(ps.drugs && ps.drugs.xanax)),
-        row('Crimes', formatNumber(crimes))));
-      el.append(h('p', { class: 'tt-sub', style: 'margin:10px 0 0' }, 'Estimated from rank, level, crimes and networth. A rough range, not exact stats.'));
+        row('Crimes', crimes === null ? 'Not available' : formatNumber(crimes))));
+      el.append(h('p', { class: 'tt-sub', style: 'margin:10px 0 0' }, 'Torn rank thresholds are score-based and affected by stat balance. Networth ghost ranks can also distort this estimate. Do not use this alone to predict fight outcomes.'));
       setFoot('Cached for 5 minutes', '');
     },
   };
