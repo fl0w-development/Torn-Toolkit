@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Toolkit
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      0.3.0
+// @version      0.3.1
 // @description  Status, travel and foreign stock, training ratios, target estimates, jump planner and market values for Torn. Read-only, uses your own API key.
 // @author       fl0w-development
 // @license      MIT
@@ -455,7 +455,7 @@
   // Browser side
   // ===========================================================================
 
-  const VERSION = '0.3.0';
+  const VERSION = '0.3.1';
   const API = 'https://api.torn.com/v2/';
   // Torn PDA (mobile app) replaces this placeholder with the user's key.
   const PDA_KEY = '###PDA-APIKEY###';
@@ -666,7 +666,7 @@
   .tt-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
   .tt-modal .tt-actions{position:sticky;bottom:-12px;margin:14px -12px -12px;padding:10px 12px;background:var(--bg);border-top:1px solid var(--border)}
   .tt-body>.tt-notice:not(:first-child){margin-top:12px}
-  .tt-overlay{position:fixed;inset:0;z-index:10000;background:rgba(10,12,16,.45);display:grid;place-items:center;padding:16px}
+  #fl0w-torn-toolkit-settings-overlay{position:fixed;inset:0;z-index:10000;background:rgba(10,12,16,.45);display:grid;place-items:center;padding:16px}
   .tt-modal{position:static;width:440px;max-width:100%;max-height:calc(100vh - 32px);overflow:auto}
   .tt-modal .tt-head{cursor:default}
   .tt-tos{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
@@ -1526,8 +1526,10 @@
   }
 
   // ---------------------------------------------------------------- Settings
+  // Other Torn userscripts may use a .tt-overlay class. Only detect our own settings modal.
+  const SETTINGS_OVERLAY_ID = 'fl0w-torn-toolkit-settings-overlay';
   function openSettings() {
-    if (document.querySelector('.tt-overlay')) return;
+    if (document.getElementById(SETTINGS_OVERLAY_ID)) return;
     const keyInput = h('input', {
       class: 'tt-input', type: 'password', autocomplete: 'off', spellcheck: 'false', maxlength: '16',
       placeholder: hasPdaKey ? 'Using your Torn PDA key' : '16-character API key', value: hasPdaKey ? '' : store.get('apiKey', ''), disabled: hasPdaKey,
@@ -1606,7 +1608,7 @@
           h('button', { class: 'tt-btn tt-btn-ghost', type: 'button', onclick: close }, 'Cancel'),
           h('button', { class: 'tt-btn', type: 'button', onclick: save }, 'Save'))));
 
-    const overlay = h('div', { class: 'tt-overlay', onclick: (e) => { if (e.target === overlay) close(); } }, modal);
+    const overlay = h('div', { id: SETTINGS_OVERLAY_ID, onclick: (e) => { if (e.target === overlay) close(); } }, modal);
     overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
     document.body.append(overlay);
     (hasPdaKey ? modal.querySelector('.tt-icon') : keyInput).focus();
