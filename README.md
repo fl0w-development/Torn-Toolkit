@@ -74,7 +74,7 @@ These are Torn's [API Terms of Service](https://www.torn.com/api.html) fields:
 
 ## Accuracy
 
-- **Battle stats** use the community rank-trigger method: a rough range, not exact stats.
+- **Battle stats** use Torn's documented rank-trigger brackets. The estimate is low-confidence even when all required public data is available: stat balance, historic networth (ghost ranks) and delayed rank updates can make it wrong. Missing public inputs now show "Insufficient public data" rather than being counted as zero. It is not a spy report or a fight-win prediction.
 - **Gym gains** use the community gym formula without perks, so they are an estimate.
 - **Training ratios** are built from the specialist gym rules (each needs 1.25× or more): Hank's keeps your main stat's single-stat gym and the opposite pair's gym; Baldr's keeps your main stat's single-stat gym and its own pair gym. Targets aim at 1.27× so a normal train never drops you below a line.
 - **Travel profit** assumes you resell at market value. Items with under a 5% margin are skipped because market value can't back up that little profit. Ticket costs are not included.
