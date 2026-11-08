@@ -1,0 +1,10 @@
+{
+  "name": "torn-toolkit",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Read-only Torn userscript: status, travel, foreign stock, target estimates, jump planner and market values",
+  "scripts": {
+    "test": "node --test"
+  },
+  "license": "MIT"
+}
