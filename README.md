@@ -19,8 +19,10 @@ The panel works in Torn's light and dark modes and on phones. It can be dragged 
 ## Install
 
 1. Install [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/).
-2. Open [`torn-toolkit.user.js`](torn-toolkit.user.js), click **Raw**, then **Install**.
+2. Open the [direct Torn Toolkit installer](https://raw.githubusercontent.com/fl0w-development/Torn-Toolkit/main/torn-toolkit.user.js) and approve **Install** in Tampermonkey/Violentmonkey. If you see the source code instead, use your userscript manager's **Install from URL** option with that same address.
 3. On Torn, click **Add API key** in the panel and paste a **Limited Access** key (see [Which API key you need](#which-api-key-you-need)).
+
+If you already pasted the script manually into Tampermonkey, **disable the older copy** when installing from the link above to prevent duplicate panels.
 
 **Torn PDA:** add the script under Settings → Userscripts. PDA fills in your key automatically. If live foreign stock can't load there, the Travel tab says so and everything else keeps working.
 
