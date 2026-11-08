@@ -1,0 +1,466 @@
+{
+ "gyms": [
+  {
+   "id": 1,
+   "name": "Premier Fitness",
+   "class": "Lightweight",
+   "energy_cost": 5,
+   "cost": 10,
+   "modifiers": {
+    "strength": 2,
+    "speed": 2,
+    "defense": 2,
+    "dexterity": 2
+   },
+   "note": null
+  },
+  {
+   "id": 2,
+   "name": "Average Joes",
+   "class": "Lightweight",
+   "energy_cost": 5,
+   "cost": 100,
+   "modifiers": {
+    "strength": 2.4,
+    "speed": 2.4,
+    "defense": 2.8,
+    "dexterity": 2.4
+   },
+   "note": null
+  },
+  {
+   "id": 3,
+   "name": "Woody's Workout Club",
+   "class": "Lightweight",
+   "energy_cost": 5,
+   "cost": 250,
+   "modifiers": {
+    "strength": 2.8,
+    "speed": 3.2,
+    "defense": 3,
+    "dexterity": 2.8
+   },
+   "note": null
+  },
+  {
+   "id": 4,
+   "name": "Beach Bods",
+   "class": "Lightweight",
+   "energy_cost": 5,
+   "cost": 500,
+   "modifiers": {
+    "strength": 3.2,
+    "speed": 3.2,
+    "defense": 3.2,
+    "dexterity": 0
+   },
+   "note": null
+  },
+  {
+   "id": 5,
+   "name": "Silver Gym",
+   "class": "Lightweight",
+   "energy_cost": 5,
+   "cost": 1000,
+   "modifiers": {
+    "strength": 3.4,
+    "speed": 3.6,
+    "defense": 3.4,
+    "dexterity": 3.2
+   },
+   "note": null
+  },
+  {
+   "id": 6,
+   "name": "Pour Femme",
+   "class": "Lightweight",
+   "energy_cost": 5,
+   "cost": 2500,
+   "modifiers": {
+    "strength": 3.4,
+    "speed": 3.6,
+    "defense": 3.6,
+    "dexterity": 3.8
+   },
+   "note": null
+  },
+  {
+   "id": 7,
+   "name": "Davies Den",
+   "class": "Lightweight",
+   "energy_cost": 5,
+   "cost": 5000,
+   "modifiers": {
+    "strength": 3.7,
+    "speed": 0,
+    "defense": 3.7,
+    "dexterity": 3.7
+   },
+   "note": null
+  },
+  {
+   "id": 8,
+   "name": "Global Gym",
+   "class": "Lightweight",
+   "energy_cost": 5,
+   "cost": 10000,
+   "modifiers": {
+    "strength": 4,
+    "speed": 4,
+    "defense": 4,
+    "dexterity": 4
+   },
+   "note": null
+  },
+  {
+   "id": 9,
+   "name": "Knuckle Heads",
+   "class": "Middleweight",
+   "energy_cost": 10,
+   "cost": 50000,
+   "modifiers": {
+    "strength": 4.8,
+    "speed": 4.4,
+    "defense": 4,
+    "dexterity": 4.2
+   },
+   "note": null
+  },
+  {
+   "id": 10,
+   "name": "Pioneer Fitness",
+   "class": "Middleweight",
+   "energy_cost": 10,
+   "cost": 100000,
+   "modifiers": {
+    "strength": 4.4,
+    "speed": 4.6,
+    "defense": 4.8,
+    "dexterity": 4.4
+   },
+   "note": null
+  },
+  {
+   "id": 11,
+   "name": "Anabolic Anomalies",
+   "class": "Middleweight",
+   "energy_cost": 10,
+   "cost": 250000,
+   "modifiers": {
+    "strength": 5,
+    "speed": 4.6,
+    "defense": 5.2,
+    "dexterity": 4.6
+   },
+   "note": null
+  },
+  {
+   "id": 12,
+   "name": "Core",
+   "class": "Middleweight",
+   "energy_cost": 10,
+   "cost": 500000,
+   "modifiers": {
+    "strength": 5,
+    "speed": 5.2,
+    "defense": 5,
+    "dexterity": 5
+   },
+   "note": null
+  },
+  {
+   "id": 13,
+   "name": "Racing Fitness",
+   "class": "Middleweight",
+   "energy_cost": 10,
+   "cost": 1000000,
+   "modifiers": {
+    "strength": 5,
+    "speed": 5.4,
+    "defense": 4.8,
+    "dexterity": 5.2
+   },
+   "note": null
+  },
+  {
+   "id": 14,
+   "name": "Complete Cardio",
+   "class": "Middleweight",
+   "energy_cost": 10,
+   "cost": 2000000,
+   "modifiers": {
+    "strength": 5.5,
+    "speed": 5.8,
+    "defense": 5.5,
+    "dexterity": 5.2
+   },
+   "note": null
+  },
+  {
+   "id": 15,
+   "name": "Legs, Bums and Tums",
+   "class": "Middleweight",
+   "energy_cost": 10,
+   "cost": 3000000,
+   "modifiers": {
+    "strength": 0,
+    "speed": 5.6,
+    "defense": 5.6,
+    "dexterity": 5.8
+   },
+   "note": null
+  },
+  {
+   "id": 16,
+   "name": "Deep Burn",
+   "class": "Middleweight",
+   "energy_cost": 10,
+   "cost": 5000000,
+   "modifiers": {
+    "strength": 6,
+    "speed": 6,
+    "defense": 6,
+    "dexterity": 6
+   },
+   "note": null
+  },
+  {
+   "id": 17,
+   "name": "Apollo Gym",
+   "class": "Heavyweight",
+   "energy_cost": 10,
+   "cost": 7500000,
+   "modifiers": {
+    "strength": 6,
+    "speed": 6.2,
+    "defense": 6.4,
+    "dexterity": 6.2
+   },
+   "note": null
+  },
+  {
+   "id": 18,
+   "name": "Gun Shop",
+   "class": "Heavyweight",
+   "energy_cost": 10,
+   "cost": 10000000,
+   "modifiers": {
+    "strength": 6.6,
+    "speed": 6.4,
+    "defense": 6.2,
+    "dexterity": 6.2
+   },
+   "note": null
+  },
+  {
+   "id": 19,
+   "name": "Force Training",
+   "class": "Heavyweight",
+   "energy_cost": 10,
+   "cost": 15000000,
+   "modifiers": {
+    "strength": 6.4,
+    "speed": 6.6,
+    "defense": 6.4,
+    "dexterity": 6.8
+   },
+   "note": null
+  },
+  {
+   "id": 20,
+   "name": "Cha Cha's",
+   "class": "Heavyweight",
+   "energy_cost": 10,
+   "cost": 20000000,
+   "modifiers": {
+    "strength": 6.4,
+    "speed": 6.4,
+    "defense": 6.8,
+    "dexterity": 7
+   },
+   "note": null
+  },
+  {
+   "id": 21,
+   "name": "Atlas",
+   "class": "Heavyweight",
+   "energy_cost": 10,
+   "cost": 30000000,
+   "modifiers": {
+    "strength": 7,
+    "speed": 6.4,
+    "defense": 6.4,
+    "dexterity": 6.6
+   },
+   "note": null
+  },
+  {
+   "id": 22,
+   "name": "Last Round",
+   "class": "Heavyweight",
+   "energy_cost": 10,
+   "cost": 50000000,
+   "modifiers": {
+    "strength": 6.8,
+    "speed": 6.6,
+    "defense": 7,
+    "dexterity": 6.6
+   },
+   "note": null
+  },
+  {
+   "id": 23,
+   "name": "The Edge",
+   "class": "Heavyweight",
+   "energy_cost": 10,
+   "cost": 75000000,
+   "modifiers": {
+    "strength": 6.8,
+    "speed": 7,
+    "defense": 7,
+    "dexterity": 6.8
+   },
+   "note": null
+  },
+  {
+   "id": 24,
+   "name": "George's",
+   "class": "Heavyweight",
+   "energy_cost": 10,
+   "cost": 100000000,
+   "modifiers": {
+    "strength": 7.3,
+    "speed": 7.3,
+    "defense": 7.3,
+    "dexterity": 7.3
+   },
+   "note": null
+  },
+  {
+   "id": 25,
+   "name": "Balboas Gym",
+   "class": "Specialist",
+   "energy_cost": 25,
+   "cost": 50000000,
+   "modifiers": {
+    "strength": 0,
+    "speed": 0,
+    "defense": 7.5,
+    "dexterity": 7.5
+   },
+   "note": "Requirements must be maintained to preserve access to this gym"
+  },
+  {
+   "id": 26,
+   "name": "Frontline Fitness",
+   "class": "Specialist",
+   "energy_cost": 25,
+   "cost": 50000000,
+   "modifiers": {
+    "strength": 7.5,
+    "speed": 7.5,
+    "defense": 0,
+    "dexterity": 0
+   },
+   "note": "Requirements must be maintained to preserve access to this gym"
+  },
+  {
+   "id": 27,
+   "name": "Gym 3000",
+   "class": "Specialist",
+   "energy_cost": 50,
+   "cost": 100000000,
+   "modifiers": {
+    "strength": 8,
+    "speed": 0,
+    "defense": 0,
+    "dexterity": 0
+   },
+   "note": "Requirements must be maintained to preserve access to this gym"
+  },
+  {
+   "id": 28,
+   "name": "Mr. Isoyamas",
+   "class": "Specialist",
+   "energy_cost": 50,
+   "cost": 100000000,
+   "modifiers": {
+    "strength": 0,
+    "speed": 0,
+    "defense": 8,
+    "dexterity": 0
+   },
+   "note": "Requirements must be maintained to preserve access to this gym"
+  },
+  {
+   "id": 29,
+   "name": "Total Rebound",
+   "class": "Specialist",
+   "energy_cost": 50,
+   "cost": 100000000,
+   "modifiers": {
+    "strength": 0,
+    "speed": 8,
+    "defense": 0,
+    "dexterity": 0
+   },
+   "note": "Requirements must be maintained to preserve access to this gym"
+  },
+  {
+   "id": 30,
+   "name": "Elites",
+   "class": "Specialist",
+   "energy_cost": 50,
+   "cost": 100000000,
+   "modifiers": {
+    "strength": 0,
+    "speed": 0,
+    "defense": 0,
+    "dexterity": 8
+   },
+   "note": "Requirements must be maintained to preserve access to this gym"
+  },
+  {
+   "id": 31,
+   "name": "The Sports Science Lab",
+   "class": "Specialist",
+   "energy_cost": 25,
+   "cost": 500000000,
+   "modifiers": {
+    "strength": 9,
+    "speed": 9,
+    "defense": 9,
+    "dexterity": 9
+   },
+   "note": "The use of drugs may result in the loss of membership without refunds"
+  },
+  {
+   "id": 32,
+   "name": "Unknown",
+   "class": "Specialist",
+   "energy_cost": 10,
+   "cost": 2147483647,
+   "modifiers": {
+    "strength": 10,
+    "speed": 10,
+    "defense": 10,
+    "dexterity": 10
+   },
+   "note": "Membership by invite only"
+  },
+  {
+   "id": 33,
+   "name": "The Jail Gym",
+   "class": "Basic",
+   "energy_cost": 5,
+   "cost": 0,
+   "modifiers": {
+    "strength": 3.4,
+    "speed": 3.4,
+    "defense": 4.6,
+    "dexterity": 0
+   },
+   "note": null
+  }
+ ]
+}

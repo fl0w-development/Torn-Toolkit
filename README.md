@@ -1,34 +1,59 @@
 # Torn Toolkit
 
-A userscript for [Torn](https://www.torn.com) that puts the things every player checks all day on one screen. It uses your own API key and runs only in your browser.
+A clean, read-only helper for [Torn](https://www.torn.com) that keeps what you check all day in one small panel. It uses your own API key, which never leaves your browser except to talk to Torn's official API.
 
 ## Features
 
-| Module | Where | What it does |
+| Tab or feature | Where | What it does |
 |---|---|---|
-| **Status HUD** | Every page | Energy, nerve, happy and life with "full in" timers; drug, booster and medical cooldowns; travel ETA; education timer. Optional notifications when a bar fills or a cooldown ends. |
-| **Market values** | Every page | A small badge with the market value next to every item image (inventory, item market, bazaars, trades). |
-| **Target estimate** | Profile and attack pages | Estimated battle stat bracket, level, rank, status, last action, networth, attacks won/lost and Xanax taken. |
-| **Jump planner** | Gym | Compares gains at normal happy against a happy jump (Ecstasy) or choco jump (candy), and shows the cheapest candy and how much the extra happy costs. |
+| **Status** | Every page | Energy, nerve, happy and life with "full in" timers; drug, booster and medical cooldowns; travel and education. Optional notifications when energy or nerve fills, a cooldown ends, you land, or a course finishes. |
+| **Travel** | Every page | Ranks every country by profit per hour for your travel type and carrying capacity. Shows the best items, cost, flight time and when you would be back (TCT). While abroad it lists the best buys in that country. It learns your real flight times, can cap spending per trip, and warns when your energy would fill while you are away. |
+| **Live foreign stock** | Travel tab | *Optional, off by default.* Shows how many of each item are on the shelves abroad, limits suggestions to what is actually in stock, and records restocks and empty shelves it sees. |
+| **Target** | Profile and attack pages | Estimated battle stat range, level, rank, status, last action, networth, attacks won/lost, Xanax taken and crimes. |
+| **Jump planner** | Gym | Reads your gym, its dots and energy per train, your stats and happy. Compares normal training against a happy jump (Ecstasy) or choco jump (candy), with the cheapest candy, its cost and your booster cooldown limit. |
+| **Market values** | Every page | A small badge with the market value next to item images. |
 
-Panels can be dragged and minimised, and each module can be turned off in settings (⚙).
+The panel works in Torn's light and dark modes and on phones. It can be dragged and collapsed, and each feature can be turned off in settings (⚙).
 
 ## Install
 
-1. Install [Tampermonkey](https://www.tampermonkey.net/) (or Violentmonkey).
-2. Open [`torn-toolkit.user.js`](torn-toolkit.user.js), click **Raw**, then click **Install** when Tampermonkey asks.
-3. On Torn, click ⚙ on the Torn Toolkit panel and paste an API key. A **Limited Access** key is enough (Torn → Settings → API Keys).
+1. Install [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/).
+2. Open [`torn-toolkit.user.js`](torn-toolkit.user.js), click **Raw**, then **Install**.
+3. On Torn, click **Add API key** in the panel. Create a **Limited Access** key under Torn → Settings → API Keys.
 
-## Privacy and Torn's rules
+**Torn PDA:** add the script under Settings → Userscripts. PDA fills in your key automatically. If live foreign stock can't load there, the Travel tab says so and everything else keeps working.
 
-- Your key is stored in your browser's userscript storage. It is sent only to `api.torn.com`.
-- The script is **read-only**: it never clicks, buys, attacks or does anything in the game for you.
-- API responses are cached (bars every 60s, item data hourly, profiles for 5 minutes), and the script caps itself at 50 calls a minute, half of Torn's limit.
+## How your API key is used
+
+These are Torn's [API Terms of Service](https://www.torn.com/api.html) fields:
+
+| | |
+|---|---|
+| **Data storage** | Only locally, in your browser. Game data is cached for 1 minute to 24 hours. |
+| **Data sharing** | Nobody. The optional live stock only downloads YATA's public list and sends nothing. |
+| **Purpose of use** | Not eligible: only you see the data. |
+| **Key storage & sharing** | Stored locally, not shared. Sent only to `api.torn.com`, in a request header. |
+| **Key access level** | Limited Access. Minimal also works; you then type in your battle stats and travel capacity yourself. |
+
+### Torn's rules
+
+- **Read-only:** the script never clicks, buys, trains, travels or attacks for you.
+- **Data sources:** it only uses data from the official API or from the page you are already viewing. It never requests other torn.com pages.
+- **Minimal requests:** each feature asks only for the selections it needs. Results are cached and shared between tabs: the status panel makes one call a minute, and item prices update hourly.
+- **Rate limit:** it stays far below Torn's limit of 100 requests a minute and backs off when the API asks it to.
+- **Bad keys:** an invalid, paused or disabled key is removed as soon as Torn reports it, so it cannot get your IP blocked.
+
+### Optional third-party service
+
+**Live foreign stock** is off unless you turn it on. When enabled, the script downloads [YATA](https://yata.yt)'s public stock list every 5 minutes. No API key or player data is sent; like any website, YATA can see your IP address. See [YATA's terms of service](https://yata.yt/tos).
 
 ## Accuracy
 
-- **Battle stat estimates** use the community rank-trigger method: a rough bracket, not exact stats.
-- **Gym gains** use the community gym formula and ignore perks, so treat them as estimates. Enter the gym dots shown on your gym.
+- **Battle stats** use the community rank-trigger method: a rough range, not exact stats.
+- **Gym gains** use the community gym formula without perks, so they are an estimate.
+- **Travel profit** assumes you resell at market value. Items with under a 5% margin are skipped because market value can't back up that little profit. Ticket costs are not included.
+- **Flight times:** until the script has seen you fly a route, times come from the standard table (Torn Travel Handbook; Torn says real flights vary by ±3%). They are marked ≈. Airstrip, WLT private jet and business class are 30%, 50% and 70% faster.
+- **Foreign stock** is reported by players through YATA and can change before you land. Restock times are only the ones this script has seen itself while you had Torn open. No public source predicts restocks.
 
 ## Development
 
@@ -36,4 +61,8 @@ Panels can be dragged and minimised, and each module can be turned off in settin
 npm test
 ```
 
-Tests cover the pure logic: stat estimation, gym simulation, candy parsing and formatting. They need Node 18+ and have no dependencies.
+The tests cover the stat estimate, gym formula, candy parsing, booster limits, API error handling, notifications, flight times and travel ranking. They use real public Torn API and YATA responses as fixtures, need Node 18+ and have no dependencies.
+
+## License
+
+MIT

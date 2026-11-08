@@ -1,0 +1,411 @@
+{
+ "items": [
+  {
+   "id": 35,
+   "name": "Box of Chocolate Bars",
+   "type": "Candy",
+   "effect": "Increases happiness by 25 and booster cooldown by 30 minutes.",
+   "value": {
+    "vendor": {
+     "country": "Torn",
+     "name": "Sally's Sweet Shop"
+    },
+    "shops": [
+     {
+      "country": "Torn",
+      "shop": "Sally's Sweet Shop",
+      "buy_price": null,
+      "sell_price": 15
+     }
+    ],
+    "buy_price": null,
+    "sell_price": 15,
+    "market_price": 853
+   }
+  },
+  {
+   "id": 36,
+   "name": "Big Box of Chocolate Bars",
+   "type": "Candy",
+   "effect": "Increases happiness by 35 and booster cooldown by 30 minutes.",
+   "value": {
+    "vendor": {
+     "country": "Torn",
+     "name": "Sally's Sweet Shop"
+    },
+    "shops": [
+     {
+      "country": "Torn",
+      "shop": "Sally's Sweet Shop",
+      "buy_price": null,
+      "sell_price": 20
+     }
+    ],
+    "buy_price": null,
+    "sell_price": 20,
+    "market_price": 51689
+   }
+  },
+  {
+   "id": 37,
+   "name": "Bag of Bon Bons",
+   "type": "Candy",
+   "effect": "Increases happiness by 25 and booster cooldown by 30 minutes.",
+   "value": {
+    "vendor": {
+     "country": "Torn",
+     "name": "Sally's Sweet Shop"
+    },
+    "shops": [
+     {
+      "country": "Torn",
+      "shop": "Sally's Sweet Shop",
+      "buy_price": null,
+      "sell_price": 16
+     }
+    ],
+    "buy_price": null,
+    "sell_price": 16,
+    "market_price": 834
+   }
+  },
+  {
+   "id": 38,
+   "name": "Box of Bon Bons",
+   "type": "Candy",
+   "effect": "Increases happiness by 25 and booster cooldown by 30 minutes.",
+   "value": {
+    "vendor": {
+     "country": "Torn",
+     "name": "Sally's Sweet Shop"
+    },
+    "shops": [
+     {
+      "country": "Torn",
+      "shop": "Sally's Sweet Shop",
+      "buy_price": null,
+      "sell_price": 20
+     }
+    ],
+    "buy_price": null,
+    "sell_price": 20,
+    "market_price": 1180
+   }
+  },
+  {
+   "id": 39,
+   "name": "Box of Extra Strong Mints",
+   "type": "Candy",
+   "effect": "Increases happiness by 25 and booster cooldown by 30 minutes.",
+   "value": {
+    "vendor": {
+     "country": "Torn",
+     "name": "Sally's Sweet Shop"
+    },
+    "shops": [
+     {
+      "country": "Torn",
+      "shop": "Sally's Sweet Shop",
+      "buy_price": null,
+      "sell_price": 22
+     }
+    ],
+    "buy_price": null,
+    "sell_price": 22,
+    "market_price": 849
+   }
+  },
+  {
+   "id": 151,
+   "name": "Pixie Sticks",
+   "type": "Candy",
+   "effect": "Increases happiness by 150 and booster cooldown by 30 minutes.",
+   "value": {
+    "vendor": {
+     "country": "Torn",
+     "name": "Sally's Sweet Shop"
+    },
+    "shops": [
+     {
+      "country": "Torn",
+      "shop": "Sally's Sweet Shop",
+      "buy_price": null,
+      "sell_price": 50
+     }
+    ],
+    "buy_price": null,
+    "sell_price": 50,
+    "market_price": 553031
+   }
+  },
+  {
+   "id": 209,
+   "name": "Box of Sweet Hearts",
+   "type": "Candy",
+   "effect": "Increases happiness by 25 and booster cooldown by 30 minutes.",
+   "value": {
+    "vendor": {
+     "country": "Torn",
+     "name": "Sally's Sweet Shop"
+    },
+    "shops": [
+     {
+      "country": "Torn",
+      "shop": "Sally's Sweet Shop",
+      "buy_price": 500,
+      "sell_price": 250
+     }
+    ],
+    "buy_price": 500,
+    "sell_price": 250,
+    "market_price": 864
+   }
+  },
+  {
+   "id": 210,
+   "name": "Bag of Chocolate Kisses",
+   "type": "Candy",
+   "effect": "Increases happiness by 25 and booster cooldown by 30 minutes.",
+   "value": {
+    "vendor": {
+     "country": "Torn",
+     "name": "Sally's Sweet Shop"
+    },
+    "shops": [
+     {
+      "country": "Torn",
+      "shop": "Sally's Sweet Shop",
+      "buy_price": 150,
+      "sell_price": 100
+     }
+    ],
+    "buy_price": 150,
+    "sell_price": 100,
+    "market_price": 856
+   }
+  },
+  {
+   "id": 310,
+   "name": "Lollipop",
+   "type": "Candy",
+   "effect": "Increases happiness by 25 and booster cooldown by 30 minutes.",
+   "value": {
+    "vendor": {
+     "country": "Torn",
+     "name": "Sally's Sweet Shop"
+    },
+    "shops": [
+     {
+      "country": "Torn",
+      "shop": "Sally's Sweet Shop",
+      "buy_price": 25,
+      "sell_price": 10
+     }
+    ],
+    "buy_price": 25,
+    "sell_price": 10,
+    "market_price": 970
+   }
+  },
+  {
+   "id": 527,
+   "name": "Bag of Candy Kisses",
+   "type": "Candy",
+   "effect": "Increases happiness by 50 and booster cooldown by 30 minutes.",
+   "value": {
+    "vendor": {
+     "country": "Torn",
+     "name": "Sally's Sweet Shop"
+    },
+    "shops": [
+     {
+      "country": "Torn",
+      "shop": "Sally's Sweet Shop",
+      "buy_price": null,
+      "sell_price": 20
+     }
+    ],
+    "buy_price": null,
+    "sell_price": 20,
+    "market_price": 37183
+   }
+  },
+  {
+   "id": 528,
+   "name": "Bag of Tootsie Rolls",
+   "type": "Candy",
+   "effect": "Increases happiness by 75 and booster cooldown by 30 minutes.",
+   "value": {
+    "vendor": {
+     "country": "Torn",
+     "name": "Sally's Sweet Shop"
+    },
+    "shops": [
+     {
+      "country": "Torn",
+      "shop": "Sally's Sweet Shop",
+      "buy_price": null,
+      "sell_price": 25
+     }
+    ],
+    "buy_price": null,
+    "sell_price": 25,
+    "market_price": 50111
+   }
+  },
+  {
+   "id": 529,
+   "name": "Bag of Chocolate Truffles",
+   "type": "Candy",
+   "effect": "Increases happiness by 100 and booster cooldown by 30 minutes.",
+   "value": {
+    "vendor": {
+     "country": "Torn",
+     "name": "Sally's Sweet Shop"
+    },
+    "shops": [
+     {
+      "country": "Torn",
+      "shop": "Sally's Sweet Shop",
+      "buy_price": null,
+      "sell_price": 75
+     }
+    ],
+    "buy_price": null,
+    "sell_price": 75,
+    "market_price": 104477
+   }
+  },
+  {
+   "id": 556,
+   "name": "Bag of Reindeer Droppings",
+   "type": "Candy",
+   "effect": "Increases happiness by 100 and booster cooldown by 30 minutes.",
+   "value": {
+    "vendor": null,
+    "shops": [],
+    "buy_price": null,
+    "sell_price": null,
+    "market_price": 130488
+   }
+  },
+  {
+   "id": 586,
+   "name": "Jawbreaker",
+   "type": "Candy",
+   "effect": "Increases happiness by 150 and booster cooldown by 30 minutes.",
+   "value": {
+    "vendor": {
+     "country": "Torn",
+     "name": "Sally's Sweet Shop"
+    },
+    "shops": [
+     {
+      "country": "Torn",
+      "shop": "Sally's Sweet Shop",
+      "buy_price": null,
+      "sell_price": 55
+     }
+    ],
+    "buy_price": null,
+    "sell_price": 55,
+    "market_price": 556096
+   }
+  },
+  {
+   "id": 587,
+   "name": "Bag of Sherbet",
+   "type": "Candy",
+   "effect": "Increases happiness by 150 and booster cooldown by 30 minutes.",
+   "value": {
+    "vendor": {
+     "country": "Torn",
+     "name": "Sally's Sweet Shop"
+    },
+    "shops": [
+     {
+      "country": "Torn",
+      "shop": "Sally's Sweet Shop",
+      "buy_price": null,
+      "sell_price": 45
+     }
+    ],
+    "buy_price": null,
+    "sell_price": 45,
+    "market_price": 553592
+   }
+  },
+  {
+   "id": 634,
+   "name": "Bag of Bloody Eyeballs",
+   "type": "Candy",
+   "effect": "Increases happiness by 75 and booster cooldown by 30 minutes.",
+   "value": {
+    "vendor": {
+     "country": "Torn",
+     "name": "Sally's Sweet Shop"
+    },
+    "shops": [
+     {
+      "country": "Torn",
+      "shop": "Sally's Sweet Shop",
+      "buy_price": null,
+      "sell_price": 5
+     }
+    ],
+    "buy_price": null,
+    "sell_price": 5,
+    "market_price": 50625
+   }
+  },
+  {
+   "id": 1028,
+   "name": "Birthday Cupcake",
+   "type": "Candy",
+   "effect": "Increases happiness by 250 and booster cooldown by 30 minutes.",
+   "value": {
+    "vendor": null,
+    "shops": [],
+    "buy_price": null,
+    "sell_price": null,
+    "market_price": 5518377
+   }
+  },
+  {
+   "id": 1039,
+   "name": "Bag of Humbugs",
+   "type": "Candy",
+   "effect": "Increases happiness by 150 and booster cooldown by 30 minutes.",
+   "value": {
+    "vendor": {
+     "country": "Torn",
+     "name": "Sally's Sweet Shop"
+    },
+    "shops": [
+     {
+      "country": "Torn",
+      "shop": "Sally's Sweet Shop",
+      "buy_price": null,
+      "sell_price": 40
+     }
+    ],
+    "buy_price": null,
+    "sell_price": 40,
+    "market_price": 936793
+   }
+  },
+  {
+   "id": 1312,
+   "name": "Chocolate Egg",
+   "type": "Candy",
+   "effect": "Increases happiness by 50 and booster cooldown by 30 minutes.",
+   "value": {
+    "vendor": null,
+    "shops": [],
+    "buy_price": null,
+    "sell_price": null,
+    "market_price": 1035319
+   }
+  }
+ ]
+}

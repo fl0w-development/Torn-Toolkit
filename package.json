@@ -1,8 +1,8 @@
 {
   "name": "torn-toolkit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Status HUD, market values, target estimates and jump planner userscript for Torn",
+  "description": "Read-only Torn userscript: status, travel, foreign stock, target estimates, jump planner and market values",
   "scripts": {
     "test": "node --test"
   },
