@@ -6,7 +6,7 @@ A clean, read-only helper for [Torn](https://www.torn.com) that keeps what you c
 
 | Tab or feature | Where | What it does |
 |---|---|---|
-| **Status** | Every page | Energy, nerve, happy and life with "full in" timers; drug, booster and medical cooldowns; travel and education. Optional notifications when energy or nerve fills, a cooldown ends, you land, or a course finishes. |
+| **Timers** | Every page | Drug, booster and medical cooldowns, plus travel and education timers. Optional notifications when energy or nerve fills, a cooldown ends, you land, or a course finishes. Torn's own energy, nerve, happy and life bars are not duplicated. |
 | **Travel** | Every page | Ranks every country by profit per hour for your travel type and carrying capacity. Shows the best items, cost, flight time and when you would be back (TCT). While abroad it lists the best buys in that country. It learns your real flight times, can cap spending per trip, and warns when your energy would fill while you are away. |
 | **Live foreign stock** | Travel tab | On by default; can be turned off. Shows how many of each item are on the shelves abroad, limits suggestions to what is actually in stock, and records restocks and empty shelves it sees. |
 | **Target** | Profile and attack pages | Estimated battle stat range, level, rank, status, last action, networth, attacks won/lost, Xanax taken and crimes. |
@@ -14,7 +14,7 @@ A clean, read-only helper for [Torn](https://www.torn.com) that keeps what you c
 | **Jump planner** | Gym | Reads your gym, its dots and energy per train, your stats and happy. Compares normal training against a happy jump (Ecstasy) or choco jump (candy), with the cheapest candy, its cost and your booster cooldown limit. |
 | **Market values** | Every page | A small badge with the market value next to item images. |
 
-Torn Toolkit integrates into the page instead of using a floating panel. The compact in-page header keeps your energy/nerve summary and Settings (⚙) within reach; click the arrow to expand the full toolkit. Gym, profile/attack, and travel pages automatically open the matching tools. It adapts to narrow screens and touch controls, and each feature can be disabled in Settings.
+Torn Toolkit integrates into the page instead of using a floating panel. The compact in-page header keeps Settings (⚙) within reach; click the arrow to expand the full toolkit. Gym, profile/attack, and travel pages automatically open the matching tools. It adapts to narrow screens and touch controls, and each feature can be disabled in Settings.
 
 ## Install
 
