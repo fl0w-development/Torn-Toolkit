@@ -1,6 +1,6 @@
 {
   "name": "torn-toolkit",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "description": "Read-only Torn userscript: status, travel, foreign stock, target estimates, jump planner and market values",
   "scripts": {

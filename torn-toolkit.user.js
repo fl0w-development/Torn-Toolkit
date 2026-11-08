@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Toolkit
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      0.4.0
+// @version      0.4.1
 // @description  Status, travel and foreign stock, training ratios, target estimates, jump planner and market values for Torn. Read-only, uses your own API key.
 // @author       fl0w-development
 // @license      MIT
@@ -313,6 +313,18 @@
     return `${s}s`;
   }
 
+  // Live timers must include seconds even when hours/days are left. Keep
+  // formatDuration concise for static labels such as flight estimates.
+  function formatCountdown(sec) {
+    sec = Math.max(0, Math.ceil(Number(sec) || 0));
+    const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600),
+      m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    if (d) return `${d}d ${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
+    if (h) return `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
+    if (m) return `${m}m ${String(s).padStart(2, '0')}s`;
+    return `${s}s`;
+  }
+
   function formatMoney(n) {
     if (n == null || !isFinite(n)) return '–';
     const abs = Math.abs(n);
@@ -443,7 +455,7 @@
 
   const logic = {
     estimateStats, gainPerTrain, simulateTraining, parseHappy, parseBoosterSeconds,
-    candyOptions, maxCandies, classifyError, updateTimers, formatDuration,
+    candyOptions, maxCandies, classifyError, updateTimers, formatDuration, formatCountdown,
     formatMoney, formatNumber, flightSeconds, calibrate, travelRuns,
     parseYata, updateStockHistory, YATA_COUNTRIES,
     ratioWeights, ratioGyms, gymRequirements, recommendTrain, RATIOS, PARTNER,
@@ -455,7 +467,7 @@
   // Browser side
   // ===========================================================================
 
-  const VERSION = '0.4.0';
+  const VERSION = '0.4.1';
   const API = 'https://api.torn.com/v2/';
   // Torn PDA (mobile app) replaces this placeholder with the user's key.
   const PDA_KEY = '###PDA-APIKEY###';
@@ -927,7 +939,7 @@
           h('div', { class: 'tt-bar-top' },
             h('span', {}, h('span', { class: 'tt-bar-name' }, cap(b)), ' ',
               h('span', { class: 'tt-sub' }, `${formatNumber(bar.current)} / ${formatNumber(bar.maximum)}`)),
-            h('span', { class: full ? 'tt-sub' : 'tt-ok' }, bar.current >= bar.maximum ? 'Full' : full ? `full in ${formatDuration(full)}` : 'Full')),
+            h('span', { class: full ? 'tt-sub' : 'tt-ok' }, bar.current >= bar.maximum ? 'Full' : full ? `full in ${formatCountdown(full)}` : 'Full')),
           h('div', { class: 'tt-track', role: 'progressbar', 'aria-label': cap(b), 'aria-valuemin': '0', 'aria-valuemax': String(bar.maximum), 'aria-valuenow': String(bar.current) },
             h('div', { class: 'tt-fill', style: `width:${pct}%;background:${BAR_COLORS[b]}` }))));
       }
@@ -936,7 +948,7 @@
       const cds = h('div', { class: 'tt-section' }, h('div', { class: 'tt-section-title' }, 'Cooldowns'));
       for (const k of ['drug', 'booster', 'medical']) {
         const t = left(d.cooldowns && d.cooldowns[k]);
-        cds.append(row(cap(k), t ? formatDuration(t) : 'Ready', t ? 'tt-warn' : 'tt-ok'));
+        cds.append(row(cap(k), t ? formatCountdown(t) : 'Ready', t ? 'tt-warn' : 'tt-ok'));
       }
       el.append(cds);
 
@@ -944,14 +956,14 @@
       const tr = d.travel;
       if (tr && tr.time_left > 0) {
         const t = left(tr.time_left);
-        other.append(row(`Flying to ${tr.destination}`, t ? formatDuration(t) : 'Landed', t ? 'tt-warn' : 'tt-ok'));
+        other.append(row(`Flying to ${tr.destination}`, t ? formatCountdown(t) : 'Landed', t ? 'tt-warn' : 'tt-ok'));
       } else {
         other.append(row('Travel', tr && tr.destination && tr.destination !== 'Torn' ? `In ${tr.destination}` : 'In Torn'));
       }
       const edu = d.education && d.education.current;
       if (edu && edu.until) {
         const t = Math.max(0, edu.until - Date.now() / 1000);
-        other.append(row('Education', t ? formatDuration(t) : 'Finished', t ? 'tt-warn' : 'tt-ok'));
+        other.append(row('Education', t ? formatCountdown(t) : 'Finished', t ? 'tt-warn' : 'tt-ok'));
       } else {
         other.append(row('Education', 'No course running', 'tt-warn'));
       }
