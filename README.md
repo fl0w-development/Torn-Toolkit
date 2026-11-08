@@ -19,9 +19,28 @@ The panel works in Torn's light and dark modes and on phones. It can be dragged 
 
 1. Install [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/).
 2. Open [`torn-toolkit.user.js`](torn-toolkit.user.js), click **Raw**, then **Install**.
-3. On Torn, click **Add API key** in the panel. Create a **Limited Access** key under Torn → Settings → API Keys.
+3. On Torn, click **Add API key** in the panel and paste a **Limited Access** key (see [Which API key you need](#which-api-key-you-need)).
 
 **Torn PDA:** add the script under Settings → Userscripts. PDA fills in your key automatically. If live foreign stock can't load there, the Travel tab says so and everything else keeps working.
+
+## Which API key you need
+
+**Use a Limited Access key.** Every feature works fully with it. You never need Full Access, so don't give this script, or any script, more access than it needs.
+
+| Feature | Key level needed |
+|---|---|
+| Status panel: bars, cooldowns, travel, education | Minimal |
+| Jump planner: your active gym | Minimal |
+| Jump planner: filling in your battle stats | **Limited** |
+| Travel: filling in how many items you can carry | **Limited** |
+| Target estimate, market values, gym list, candy and foreign shop prices | Public |
+| Live foreign stock | No key (it comes from YATA) |
+
+- **Limited:** everything works automatically.
+- **Minimal:** everything works, but you type in your battle stats and carrying capacity yourself. The panel asks when it needs them.
+- **Public:** not enough. The status panel and travel helper need at least Minimal.
+
+To create one, go to Torn → Settings → API Keys, choose **Limited Access**, and name it something like "Torn Toolkit" so you can recognise or delete it later.
 
 ## How your API key is used
 
