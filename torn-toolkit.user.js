@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Torn Toolkit
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      0.2.0
-// @description  Status HUD, market values, target stat estimates and a happy/choco jump planner for Torn. Read-only, uses your own API key.
+// @version      0.3.0
+// @description  Status, travel and foreign stock, training ratios, target estimates, jump planner and market values for Torn. Read-only, uses your own API key.
 // @author       fl0w-development
 // @license      MIT
 // @match        https://www.torn.com/*
@@ -20,7 +20,9 @@
 
 /*
  * Torn Toolkit follows Torn's scripting rules and API Terms of Service:
- *  - Read-only. It never clicks, submits or performs any game action.
+ *  - Read-only. It never clicks, submits or performs any game action. The gym
+ *    Fill button only types a number into Torn's train box; the player presses
+ *    Train themselves (one click, one action).
  *  - It only uses data from the official API (api.torn.com) or from the page
  *    you are already viewing. It never requests other torn.com pages and never
  *    contacts any other website.
@@ -109,6 +111,127 @@
       h = Math.max(0, h - Math.round(energyPerTrain / 2));
     }
     return { trains, gain: s - stat, endStat: s, endHappy: h };
+  }
+
+  // ---- Training ratios -------------------------------------------------------
+  // Each stat's partner in the specialist pair gyms (Frontline: str+spd, Balboas: def+dex).
+  const PARTNER = { strength: 'speed', speed: 'strength', defense: 'dexterity', dexterity: 'defense' };
+  // Specialist gym rules use "25% higher". Targets aim slightly above it so a
+  // normal train never drops you below an unlock line.
+  const UNLOCK = 1.25;
+  const SAFE = 1.27;
+  const RATIOS = {
+    balanced: 'Balanced (all equal)',
+    hanks: "Hank's ratio",
+    baldrs: "Baldr's ratio",
+    custom: 'Custom',
+  };
+
+  /**
+   * Target weights per stat.
+   * Hank's: main stat at 8.0 gym (1.25× next stat), the other pair at their
+   *   7.5 pair gym (pair 1.25× the main + its partner), the main's partner low.
+   * Baldr's: main stat at 8.0 gym, main + partner at their 7.5 pair gym, the
+   *   other two trained in a normal gym.
+   */
+  function ratioWeights(kind, primary, custom) {
+    const w = { strength: 1, speed: 1, defense: 1, dexterity: 1 };
+    if (kind === 'balanced') return w;
+    if (kind === 'custom') {
+      const out = {};
+      STATS.forEach((s, i) => { out[s] = Math.max(0, Number(custom && custom[i]) || 0); });
+      return STATS.some((s) => out[s] > 0) ? out : null;
+    }
+    if (!PARTNER[primary]) return null;
+    if (kind === 'hanks') {
+      w[primary] = SAFE;
+      w[PARTNER[primary]] = 0.3;
+      return w;
+    }
+    if (kind === 'baldrs') {
+      STATS.forEach((s) => { w[s] = 0.88; });
+      w[primary] = SAFE;
+      w[PARTNER[primary]] = 1;
+      return w;
+    }
+    return null;
+  }
+
+  const SINGLE_GYM = { strength: 'Gym 3000', defense: 'Mr. Isoyamas', speed: 'Total Rebound', dexterity: 'Elites' };
+  const PAIR_GYM = { strength: 'Frontline Fitness', speed: 'Frontline Fitness', defense: 'Balboas Gym', dexterity: 'Balboas Gym' };
+
+  /** The specialist gyms a named ratio is built to keep. Balanced/custom keep none. */
+  function ratioGyms(kind, primary) {
+    if (!PARTNER[primary]) return [];
+    if (kind === 'hanks') {
+      const other = STATS.find((s) => s !== primary && s !== PARTNER[primary]);
+      return [SINGLE_GYM[primary], PAIR_GYM[other]];
+    }
+    if (kind === 'baldrs') return [SINGLE_GYM[primary], PAIR_GYM[primary]];
+    return [];
+  }
+
+  /** Specialist gym requirements, checked against current stats. */
+  function gymRequirements(stats) {
+    const v = (s) => Number(stats[s]) || 0;
+    const pairs = [
+      { name: 'Balboas Gym', stats: ['defense', 'dexterity'], other: ['strength', 'speed'] },
+      { name: 'Frontline Fitness', stats: ['strength', 'speed'], other: ['defense', 'dexterity'] },
+    ].map((g) => {
+      const a = v(g.stats[0]) + v(g.stats[1]);
+      const b = v(g.other[0]) + v(g.other[1]);
+      const ratio = b > 0 ? a / b : (a > 0 ? Infinity : 0);
+      return { name: g.name, stats: g.stats, ratio, ok: ratio >= UNLOCK };
+    });
+    const singles = [['Gym 3000', 'strength'], ['Mr. Isoyamas', 'defense'], ['Total Rebound', 'speed'], ['Elites', 'dexterity']]
+      .map(([name, s]) => {
+        const next = Math.max(...STATS.filter((o) => o !== s).map(v));
+        const ratio = next > 0 ? v(s) / next : (v(s) > 0 ? Infinity : 0);
+        return { name, stats: [s], ratio, ok: ratio >= UNLOCK };
+      });
+    return pairs.concat(singles);
+  }
+
+  /**
+   * Which stat to train next and how many trains in the current gym.
+   * Trains the stat furthest below its target until it catches up with the
+   * next stat, energy runs out, or one more train would lose a specialist gym
+   * in `protect` that you currently qualify for.
+   */
+  function recommendTrain({ stats, weights, gym, energy, happy, protect = [], onlyTrainable = false }) {
+    const active = STATS.filter((s) => weights[s] > 0);
+    if (!active.length) return null;
+    const score = (st, s) => (Number(st[s]) || 0) / weights[s];
+    // onlyTrainable: pick the most-behind stat this gym can train (used as a fallback).
+    const pool = onlyTrainable ? active.filter((s) => gym.modifiers[s] > 0) : active;
+    if (!pool.length) return null;
+    const stat = pool.slice().sort((a, b) => score(stats, a) - score(stats, b))[0];
+    const others = active.filter((s) => s !== stat).map((s) => score(stats, s));
+    const goal = others.length ? Math.min(...others) * weights[stat] : Infinity;
+    const dots = gym.modifiers[stat] || 0;
+    if (!dots) return { stat, trains: 0, reason: 'gym' };
+    const maxTrains = Math.floor((Number(energy) || 0) / gym.energy_cost);
+    if (maxTrains < 1) return { stat, trains: 0, reason: 'energy' };
+
+    const keep = gymRequirements(stats).filter((r) => r.ok && protect.includes(r.name)).map((r) => r.name);
+    const st = { ...stats };
+    let h = Math.min(Number(happy) || 0, MAX_HAPPY);
+    let trains = 0, gain = 0;
+    while (trains < maxTrains) {
+      const g = gainPerTrain({ stat: st[stat], happy: h, gymDots: dots, energyPerTrain: gym.energy_cost, statType: stat });
+      const next = { ...st, [stat]: st[stat] + g };
+      const lost = gymRequirements(next).filter((r) => keep.includes(r.name) && !r.ok);
+      if (lost.length) {
+        return trains ? { stat, trains, gain, reason: 'limit', limitedBy: lost[0].name }
+          : { stat, trains: 0, reason: 'blocked', limitedBy: lost[0].name };
+      }
+      st[stat] = next[stat];
+      gain += g;
+      trains++;
+      h = Math.max(0, h - Math.round(gym.energy_cost / 2));
+      if (st[stat] >= goal) break;
+    }
+    return { stat, trains, gain, reason: st[stat] >= goal ? 'caughtUp' : 'energy-cap' };
   }
 
   /** "Increases happiness by 25 and booster cooldown by 30 minutes." -> 25 */
@@ -323,6 +446,7 @@
     candyOptions, maxCandies, classifyError, updateTimers, formatDuration,
     formatMoney, formatNumber, flightSeconds, calibrate, travelRuns,
     parseYata, updateStockHistory, YATA_COUNTRIES,
+    ratioWeights, ratioGyms, gymRequirements, recommendTrain, RATIOS, PARTNER,
     STAT_RANGES, RANKS, FLIGHT_MINUTES, METHOD_MULT,
   };
   if (typeof module !== 'undefined' && module.exports) { module.exports = logic; return; }
@@ -331,7 +455,7 @@
   // Browser side
   // ===========================================================================
 
-  const VERSION = '0.2.0';
+  const VERSION = '0.3.0';
   const API = 'https://api.torn.com/v2/';
   // Torn PDA (mobile app) replaces this placeholder with the user's key.
   const PDA_KEY = '###PDA-APIKEY###';
@@ -360,6 +484,7 @@
   const DEFAULTS = {
     hud: true, market: true, target: true, jump: true, travel: true, foreignStock: true, notify: false,
     boosterCapHours: 24, travelMethod: 'auto', travelCapacity: 0, travelBudget: 0, collapsed: false, pos: null,
+    ratio: true, ratioOnPage: true, ratioKind: 'balanced', ratioPrimary: 'dexterity', ratioCustom: [1, 1, 1, 1],
   };
   const settings = Object.assign({}, DEFAULTS, store.get('settings', {}));
   const saveSettings = () => store.set('settings', settings);
@@ -494,8 +619,9 @@
     border-bottom:1px solid var(--border)}
   .tt-root.tt-collapsed .tt-head{border-bottom:0}
   .tt-head:active{cursor:grabbing}
-  .tt-title{font-weight:600;font-size:13px;letter-spacing:.01em}
-  .tt-mini{margin-left:auto;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .tt-title{font-weight:600;font-size:13px;letter-spacing:.01em;white-space:nowrap}
+  .tt-mini{margin-left:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .tt-tag{display:inline-block;margin-left:6px;padding:0 5px;border-radius:4px;font-size:10.5px;font-weight:600;background:var(--surface);color:var(--accent);vertical-align:1px}
   .tt-icon{all:unset;display:grid;place-items:center;width:26px;height:26px;border-radius:6px;color:var(--muted);cursor:pointer}
   .tt-icon:hover{background:var(--surface);color:var(--text)}
   .tt-icon:focus-visible,.tt-tab:focus-visible,.tt-btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
@@ -559,6 +685,11 @@
   .tt-item .tt-row>span:last-child,.tt-trip .tt-row>span:last-child{white-space:nowrap}
   .tt-grid-wide{grid-template-columns:3fr 2fr}
   .tt-link{color:var(--accent)}
+  .tt-grid-one{grid-template-columns:1fr}
+  .tt-grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:0 6px}
+  .tt-fill-btn{display:block;margin:6px auto 0;padding:4px 10px;border:0;border-radius:6px;background:#2f6fde;color:#fff;font:600 12px/1.4 system-ui,Arial,sans-serif;cursor:pointer}
+  .tt-fill-btn:hover{filter:brightness(1.1)}
+  .tt-fill-btn:focus-visible{outline:2px solid #2f6fde;outline-offset:2px}
   .tt-mv{display:inline-block;margin:2px 4px;padding:1px 5px;border-radius:4px;font:600 10px/1.4 system-ui,Arial,sans-serif;
     color:#0f5132;background:#d1f0dd;vertical-align:middle;white-space:nowrap;pointer-events:none}
   body.dark-mode .tt-mv{color:#b9f0cd;background:#17402a}
@@ -657,7 +788,7 @@
     if (settings.hud) t.push('status');
     if (settings.travel) t.push('travel');
     if (settings.target && ctx.targetId && /^\d+$/.test(ctx.targetId)) t.push('target');
-    if (settings.jump && ctx.page === 'gym') t.push('gym');
+    if ((settings.jump || settings.ratio) && ctx.page === 'gym') t.push('gym');
     return t;
   }
   let activeTab = null;
@@ -855,7 +986,7 @@
   };
 
   // ---------------------------------------------------------------- Gym (jump planner) view
-  const gymState = { me: null, gyms: null, candy: null, error: null, limited: true, loaded: false };
+  const gymState = { me: null, gyms: null, candy: null, error: null, limited: true, loaded: false, rec: null };
   const gymInputs = {
     statType: 'strength', energy: null, happy: null, statValue: null,
     candyId: null, candyCount: 0, ecstasy: true,
@@ -885,17 +1016,197 @@
       if (gymInputs.candyId == null && gymState.candy[0]) gymInputs.candyId = gymState.candy[0].id;
     } catch (e) { gymState.error = e; }
     gymState.loaded = true;
+    if (settings.ratio) watchGymPage();
     if (activeTab === 'gym') renderActive();
   }
 
+  // ---- Gym page: the fill button (the player still clicks Train) -------------
+  const STAT_LABEL = { strength: 'Strength', speed: 'Speed', dexterity: 'Dexterity', defense: 'Defense' };
+
+  /**
+   * Find each stat's train box on Torn's gym page by its visible label and its
+   * Train button, so it doesn't depend on Torn's internal class names.
+   */
+  function findGymBoxes() {
+    const found = {};
+    for (const input of document.querySelectorAll('input')) {
+      if (input.closest('.tt-root') || !['text', 'number', 'tel', ''].includes(input.type)) continue;
+      let node = input.parentElement;
+      for (let depth = 0; node && depth < 8; depth++, node = node.parentElement) {
+        // textContent joins neighbouring elements without spaces ("STRENGTHStrengthTRAIN"),
+        // so match plain text, not whole words. A box must name exactly one stat.
+        const text = (node.textContent || '').toLowerCase();
+        const names = STATS.filter((s) => text.includes(s));
+        if (names.length > 1) break;
+        const hasTrain = [...node.querySelectorAll('button')].some((b) => /train/i.test(b.textContent || '') && !b.closest('.tt-root') && !b.classList.contains('tt-fill-btn'));
+        if (names.length === 1 && hasTrain) { if (!found[names[0]]) found[names[0]] = { input, block: node }; break; }
+      }
+    }
+    return found;
+  }
+
+  /** Put a number in Torn's input the way typing would, so the page's own code sees it. */
+  function fillInput(input, value) {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setter.call(input, String(value));
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    input.focus();
+  }
+
+  function placeFillButton(rec) {
+    document.querySelectorAll('.tt-fill-btn').forEach((b) => b.remove());
+    if (!settings.ratioOnPage || !rec || !rec.trains) return false;
+    const box = findGymBoxes()[rec.stat];
+    if (!box) return false;
+    const btn = h('button', {
+      class: 'tt-fill-btn', type: 'button', title: 'Torn Toolkit: fills the number in. You still press Train yourself.',
+      onclick: (e) => { e.preventDefault(); e.stopPropagation(); fillInput(box.input, rec.trains); },
+    }, `Fill ${rec.trains} (ratio)`);
+    box.block.append(btn);
+    return true;
+  }
+
+  let gymWatchStarted = false;
+  function watchGymPage() {
+    if (gymWatchStarted) return;
+    gymWatchStarted = true;
+    // Only observe the player's own Train clicks, then refresh stats so the next suggestion is right.
+    document.addEventListener('click', (e) => {
+      const b = e.target.closest && e.target.closest('button');
+      if (!b || b.closest('.tt-root') || b.classList.contains('tt-fill-btn') || !/train/i.test(b.textContent || '')) return;
+      setTimeout(() => refreshGymStats(), 2500);
+    }, true);
+    // The gym page redraws itself; put the button back when it does.
+    let queued = false;
+    new MutationObserver(() => {
+      if (queued) return;
+      queued = true;
+      setTimeout(() => {
+        queued = false;
+        if (gymState.rec && !document.querySelector('.tt-fill-btn')) placeFillButton(gymState.rec);
+      }, 500);
+    }).observe(document.body, { childList: true, subtree: true });
+  }
+
+  async function refreshGymStats() {
+    try {
+      // `timestamp` makes the request unique so Torn's 30-second service cache is skipped (allowed by the API docs).
+      const sel = gymState.limited ? 'bars,cooldowns,battlestats,gym' : 'bars,cooldowns,gym';
+      const me = await api('user', { selections: sel, timestamp: String(Math.floor(Date.now() / 1000)) }, { ttl: 0 });
+      gymState.me = me;
+      gymInputs.energy = me.bars.energy.current;
+      gymInputs.happy = me.bars.happy.current;
+      if (gymState.limited && me.battlestats) gymInputs.statValue = me.battlestats[gymInputs.statType].value;
+    } catch (e) { /* keep the last stats; errors show on the next load */ }
+    if (activeTab === 'gym') renderActive();
+  }
+
+  function renderRatio(el, me, gym) {
+    const section = h('div', { class: 'tt-section' }, h('div', { class: 'tt-section-title' }, 'Training ratio'));
+    el.append(section);
+    if (!gymState.limited || !me.battlestats) {
+      section.append(notice('Ratio guidance needs your battle stats, which need a Limited Access key.', 'warn'));
+      return;
+    }
+    const stats = {};
+    STATS.forEach((s) => { stats[s] = me.battlestats[s].value; });
+
+    const kindSelect = h('select', { class: 'tt-input', onchange: (e) => { settings.ratioKind = e.target.value; saveSettings(); renderActive(); } },
+      Object.entries(RATIOS).map(([k, label]) => h('option', { value: k, selected: settings.ratioKind === k }, label)));
+    const mainSelect = h('select', { class: 'tt-input', onchange: (e) => { settings.ratioPrimary = e.target.value; saveSettings(); renderActive(); } },
+      STATS.map((s) => h('option', { value: s, selected: settings.ratioPrimary === s }, STAT_LABEL[s])));
+    const needsMain = settings.ratioKind === 'hanks' || settings.ratioKind === 'baldrs';
+    section.append(h('div', { class: 'tt-grid' + (needsMain ? '' : ' tt-grid-one') },
+      h('label', { class: 'tt-field' }, h('span', {}, 'Ratio'), kindSelect),
+      needsMain ? h('label', { class: 'tt-field' }, h('span', {}, 'Main stat'), mainSelect) : null));
+    if (settings.ratioKind === 'custom') {
+      const custom = settings.ratioCustom || [1, 1, 1, 1];
+      section.append(h('div', { class: 'tt-grid4' }, STATS.map((s, i) => h('label', { class: 'tt-field' }, h('span', {}, STAT_LABEL[s].slice(0, 3)),
+        h('input', { class: 'tt-input', type: 'number', min: '0', step: '0.01', value: custom[i],
+          onchange: (e) => { const c = (settings.ratioCustom || [1, 1, 1, 1]).slice(); c[i] = Math.max(0, Number(e.target.value) || 0); settings.ratioCustom = c; saveSettings(); renderActive(); } })))));
+    }
+
+    const weights = ratioWeights(settings.ratioKind, settings.ratioPrimary, settings.ratioCustom);
+    if (!weights) { section.append(notice('Give at least one stat a value above 0.', 'warn')); gymState.rec = null; placeFillButton(null); return; }
+    const protect = ratioGyms(settings.ratioKind, settings.ratioPrimary);
+    const rec = recommendTrain({ stats, weights, gym, energy: me.bars.energy.current, happy: me.bars.happy.current, protect });
+    gymState.rec = rec;
+
+    const card = h('div', { class: 'tt-result' });
+    if (rec.trains > 0) {
+      card.append(h('div', { class: 'tt-sub' }, 'Train next'),
+        h('div', { class: 'tt-big' }, `${STAT_LABEL[rec.stat]} × ${rec.trains}`),
+        h('div', { class: 'tt-sub' }, `${rec.trains * gym.energy_cost}E in ${gym.name} · about +${formatNumber(rec.gain)}`,
+          rec.reason === 'limit' ? ` · stops before you lose ${rec.limitedBy}` : '',
+          rec.reason === 'energy-cap' ? ' · all your energy' : ''));
+      const onPage = placeFillButton(rec);
+      card.append(h('div', { class: 'tt-actions', style: 'justify-content:flex-start;margin-top:10px' },
+        h('button', { class: 'tt-btn', type: 'button', onclick: () => {
+          const box = findGymBoxes()[rec.stat];
+          if (box) fillInput(box.input, rec.trains);
+          else card.append(notice(`Couldn’t find the ${STAT_LABEL[rec.stat]} box on this page. Type ${rec.trains} there yourself.`, 'warn'));
+        } }, `Fill ${rec.trains} into ${STAT_LABEL[rec.stat]}`)),
+      h('div', { class: 'tt-sub', style: 'margin-top:6px' }, onPage || !settings.ratioOnPage ? 'Then press Train yourself. The suggestion updates after you train.' : 'Then press Train yourself.'));
+    } else if (rec.reason === 'gym') {
+      card.append(h('div', { class: 'tt-sub' }, 'Train next'), h('div', { class: 'tt-big' }, STAT_LABEL[rec.stat]),
+        h('div', { class: 'tt-sub' }, `${gym.name} can’t train ${STAT_LABEL[rec.stat].toLowerCase()}. Switch to a gym that can.`));
+      const alt = recommendTrain({ stats, weights, gym, energy: me.bars.energy.current, happy: me.bars.happy.current, protect, onlyTrainable: true });
+      if (alt && alt.trains > 0) {
+        gymState.rec = alt;
+        placeFillButton(alt);
+        card.append(h('div', { class: 'tt-sub', style: 'margin-top:8px' }, `Or, in this gym: ${STAT_LABEL[alt.stat]} × ${alt.trains} (about +${formatNumber(alt.gain)})`),
+          h('div', { class: 'tt-actions', style: 'justify-content:flex-start;margin-top:8px' },
+            h('button', { class: 'tt-btn tt-btn-ghost', type: 'button', onclick: () => {
+              const box = findGymBoxes()[alt.stat];
+              if (box) fillInput(box.input, alt.trains);
+              else card.append(notice(`Couldn’t find the ${STAT_LABEL[alt.stat]} box on this page. Type ${alt.trains} there yourself.`, 'warn'));
+            } }, `Fill ${alt.trains} into ${STAT_LABEL[alt.stat]}`)));
+      } else {
+        placeFillButton(null);
+      }
+    } else if (rec.reason === 'blocked') {
+      card.append(h('div', { class: 'tt-sub' }, 'Train next'), h('div', { class: 'tt-big' }, STAT_LABEL[rec.stat]),
+        h('div', { class: 'tt-err' }, `Even one train would lose ${rec.limitedBy}. Train another stat or adjust your ratio.`));
+      placeFillButton(null);
+    } else {
+      card.append(h('div', { class: 'tt-sub' }, 'Train next'), h('div', { class: 'tt-big' }, STAT_LABEL[rec.stat]),
+        h('div', { class: 'tt-sub' }, `Not enough energy for a ${gym.energy_cost}E train here.`));
+      placeFillButton(null);
+    }
+    section.append(card);
+
+    // Current vs target share
+    const total = STATS.reduce((a, s) => a + stats[s], 0) || 1;
+    const wTotal = STATS.reduce((a, s) => a + weights[s], 0) || 1;
+    const table = h('div', { class: 'tt-section' }, h('div', { class: 'tt-row tt-sub' }, h('span', {}, 'Stat'), h('span', {}, 'Now → target')));
+    STATS.forEach((s) => {
+      const now = (stats[s] / total) * 100, target = (weights[s] / wTotal) * 100;
+      table.append(row(h('span', { class: s === rec.stat ? 'tt-strong' : '' }, `${STAT_LABEL[s]} ${formatMoney(stats[s]).slice(1)}`),
+        h('span', { class: Math.abs(now - target) < 1 ? 'tt-ok' : '' }, `${now.toFixed(1)}% → ${target.toFixed(1)}%`)));
+    });
+    section.append(table);
+
+    const reqs = h('div', { class: 'tt-section' }, h('div', { class: 'tt-section-title' }, 'Specialist gym requirements'));
+    gymRequirements(stats).forEach((r) => reqs.append(row(
+      h('span', { class: protect.includes(r.name) ? 'tt-strong' : '' }, r.name, protect.includes(r.name) ? h('span', { class: 'tt-tag' }, 'ratio') : null),
+      h('span', { class: r.ok ? 'tt-ok' : 'tt-sub' }, `${r.ok ? '✓' : '✗'} ${isFinite(r.ratio) ? r.ratio.toFixed(2) : '–'}×`))));
+    reqs.append(h('p', { class: 'tt-sub', style: 'margin:6px 0 0' }, 'Each gym needs 1.25× or more. Single-stat gyms compare the stat with your next highest; pair gyms compare the pair with the other two. “ratio” marks the gyms your ratio keeps. Each gym also has to be unlocked in Torn first.'));
+    section.append(reqs);
+  }
+
   views.gym = {
-    title: 'Jump planner',
+    title: 'Gym',
     render(el) {
       if (gymState.error) { el.append(notice(gymState.error.message, 'err')); return; }
       if (!gymState.loaded) { el.append(h('p', { class: 'tt-sub' }, 'Loading…')); return; }
       const { me, gyms, candy } = gymState;
       const gym = gyms.find((g) => g.id === (me.gym && me.gym.id));
       if (!gym) { el.append(notice('Could not find your active gym.', 'err')); return; }
+      if (settings.ratio) renderRatio(el, me, gym);
+      else placeFillButton(null);
+      if (!settings.jump) { setFoot(gym.name, ''); return; }
+      el.append(h('div', { class: 'tt-section' }, h('div', { class: 'tt-section-title' }, 'Happy / choco jump')));
 
       const trainable = STATS.filter((s) => gym.modifiers[s] > 0);
       if (!trainable.includes(gymInputs.statType)) gymInputs.statType = trainable[0];
@@ -1274,7 +1585,9 @@
           check('hud', 'Status panel', 'bars, cooldowns, travel, education'),
           check('market', 'Market values', 'badge next to item images'),
           check('target', 'Target estimate', 'profile and attack pages'),
-          check('jump', 'Jump planner', 'gym page'),
+          check('jump', 'Gym tab', 'gym page: jump planner'),
+          check('ratio', 'Training ratio', 'tells you which stat to train next'),
+          check('ratioOnPage', 'Fill button on the gym page', 'fills the number; you still press Train'),
           check('travel', 'Travel helper', 'best trips, buys abroad, landing times'),
           check('foreignStock', 'Live foreign stock', 'from YATA'),
           h('div', { class: 'tt-sub', style: 'margin:2px 0 0 23px' },
@@ -1303,7 +1616,7 @@
   function onContextChange() {
     ctx = pageContext();
     if (settings.target && ctx.targetId && /^\d+$/.test(ctx.targetId) && ctx.targetId !== targetState.id) loadTarget(ctx.targetId);
-    if (settings.jump && ctx.page === 'gym' && !gymState.loaded) loadGym();
+    if ((settings.jump || settings.ratio) && ctx.page === 'gym' && !gymState.loaded) loadGym();
     renderTabs();
     renderActive();
   }
