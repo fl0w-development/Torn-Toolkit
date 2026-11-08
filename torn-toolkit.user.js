@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Toolkit
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      0.3.1
+// @version      0.4.0
 // @description  Status, travel and foreign stock, training ratios, target estimates, jump planner and market values for Torn. Read-only, uses your own API key.
 // @author       fl0w-development
 // @license      MIT
@@ -455,7 +455,7 @@
   // Browser side
   // ===========================================================================
 
-  const VERSION = '0.3.1';
+  const VERSION = '0.4.0';
   const API = 'https://api.torn.com/v2/';
   // Torn PDA (mobile app) replaces this placeholder with the user's key.
   const PDA_KEY = '###PDA-APIKEY###';
@@ -615,6 +615,13 @@
   body.dark-mode .tt-root,.tt-root.tt-dark{--bg:#1d1f23;--surface:#26292e;--border:#363a41;--text:#e7e9ec;--muted:#9aa1ab;
     --accent:#6ea8ff;--ok:#4cc27a;--warn:#f0b35a;--err:#ff7b72;--shadow:0 8px 24px rgba(0,0,0,.45)}
   .tt-root *{box-sizing:border-box}
+  .tt-root [hidden]{display:none!important}
+  .tt-root.tt-inline{position:relative;z-index:1;width:100%;max-width:100%;margin:0 0 12px;box-shadow:none;overflow:hidden}
+  .tt-inline .tt-head{cursor:default;touch-action:auto;min-height:44px}
+  .tt-inline .tt-head:active{cursor:default}
+  .tt-inline .tt-body{max-height:none;overflow:visible}
+  .tt-inline.tt-collapsed{border-radius:6px}
+  .tt-inline.tt-collapsed .tt-head{border:0}
   .tt-head{display:flex;align-items:center;gap:8px;padding:8px 8px 8px 12px;cursor:grab;user-select:none;touch-action:none;
     border-bottom:1px solid var(--border)}
   .tt-root.tt-collapsed .tt-head{border-bottom:0}
@@ -693,7 +700,21 @@
   .tt-mv{display:inline-block;margin:2px 4px;padding:1px 5px;border-radius:4px;font:600 10px/1.4 system-ui,Arial,sans-serif;
     color:#0f5132;background:#d1f0dd;vertical-align:middle;white-space:nowrap;pointer-events:none}
   body.dark-mode .tt-mv{color:#b9f0cd;background:#17402a}
-  @media (max-width:600px){.tt-root:not(.tt-modal){width:calc(100vw - 32px)}}
+  @media (max-width:600px){
+    .tt-root.tt-inline{width:100%;max-width:100%;margin:0 0 10px;border-radius:8px}
+    .tt-inline .tt-head{padding:6px 8px;gap:6px}
+    .tt-inline .tt-tabs{flex-wrap:wrap}
+    .tt-inline .tt-tab{min-width:68px;min-height:40px}
+    .tt-inline .tt-icon{min-width:40px;min-height:40px}
+    .tt-inline .tt-grid,.tt-inline .tt-grid-wide{grid-template-columns:minmax(0,1fr)}
+    .tt-inline .tt-grid4{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .tt-inline .tt-row{flex-wrap:wrap;gap:4px 8px}
+    .tt-inline .tt-body{padding:10px}
+    .tt-inline .tt-input,.tt-modal .tt-input{font-size:16px;min-height:44px}
+    .tt-inline .tt-btn,.tt-modal .tt-btn{min-height:40px}
+    .tt-modal{width:100%;max-height:calc(100dvh - 24px)}
+    #fl0w-torn-toolkit-settings-overlay{padding:12px}
+  }
   @media (prefers-reduced-motion:reduce){.tt-fill{transition:none}}`;
 
   const ICONS = {
@@ -714,72 +735,71 @@
     if (u.pathname === '/profiles.php') return { page: 'profile', targetId: u.searchParams.get('XID') };
     if (u.pathname === '/loader.php' && u.searchParams.get('sid') === 'attack') return { page: 'attack', targetId: u.searchParams.get('user2ID') };
     if (u.pathname === '/gym.php') return { page: 'gym' };
+    if (['/travelagency.php', '/travel.php', '/abroad.php'].includes(u.pathname)) return { page: 'travel' };
     return { page: 'other' };
   }
+  const isToolPage = (c) => ['profile', 'attack', 'gym', 'travel'].includes(c.page);
 
-  // ---------------------------------------------------------------- dock
+  // ---------------------------------------------------------------- in-page toolkit
   let dock, bodyEl, tabsEl, footEl, miniEl, collapseBtn;
   let ctx = pageContext();
   const views = {}; // tab id -> { title, render(container), tick?() }
 
+  // Insert into Torn's content flow, never over its controls. Torn uses different
+  // wrappers on desktop and mobile, so keep several safe fallbacks.
+  function inlineHost() {
+    const selectors = ['.content-wrapper', '#mainContainer', '#main-content',
+      '[class*="contentWrapper"]', 'main', '#content'];
+    for (const selector of selectors) {
+      const host = document.querySelector(selector);
+      if (host && host !== dock && !host.closest('.tt-root')) return host;
+    }
+    return document.body;
+  }
+
+  function mountInlineDock() {
+    if (!dock) return;
+    const host = inlineHost();
+    if (host && dock.parentElement !== host) host.prepend(dock);
+  }
+
   function buildDock() {
     document.head.append(h('style', { id: 'tt-style' }, CSS));
+    // The previous floating-panel preference is intentionally ignored:
+    // ordinary pages start compact; relevant pages open their own tools.
+    settings.collapsed = Boolean(getKey()) && !isToolPage(ctx);
     miniEl = h('span', { class: 'tt-mini', 'aria-live': 'off' });
-    collapseBtn = iconBtn(settings.collapsed ? 'down' : 'up', settings.collapsed ? 'Expand' : 'Collapse', toggleCollapse);
-    const head = h('div', { class: 'tt-head' }, h('span', { class: 'tt-title' }, 'Torn Toolkit'), miniEl,
-      iconBtn('gear', 'Settings', openSettings), collapseBtn);
+    collapseBtn = iconBtn(settings.collapsed ? 'down' : 'up',
+      settings.collapsed ? 'Show toolkit' : 'Hide toolkit', toggleCollapse);
+    const head = h('div', { class: 'tt-head' },
+      h('span', { class: 'tt-title' }, 'Torn Toolkit'),
+      miniEl, iconBtn('gear', 'Settings', openSettings), collapseBtn);
     tabsEl = h('div', { class: 'tt-tabs', role: 'tablist' });
     bodyEl = h('div', { class: 'tt-body', role: 'tabpanel' });
     footEl = h('div', { class: 'tt-foot' });
-    dock = h('div', { class: 'tt-root' + (settings.collapsed ? ' tt-collapsed' : ''), role: 'region', 'aria-label': 'Torn Toolkit' },
-      head, tabsEl, bodyEl, footEl);
-    document.body.append(dock);
-    placeDock();
-    enableDrag(dock, head);
-    window.addEventListener('resize', placeDock);
+    dock = h('section', {
+      id: 'fl0w-torn-toolkit-inline',
+      class: 'tt-root tt-inline' + (settings.collapsed ? ' tt-collapsed' : ''),
+      'aria-label': 'Torn Toolkit',
+    }, head, tabsEl, bodyEl, footEl);
+    mountInlineDock();
     applyCollapsed();
-  }
-
-  function placeDock() {
-    const w = dock.offsetWidth || 280, hgt = dock.offsetHeight || 60;
-    const pos = settings.pos || { x: window.innerWidth - w - 16, y: 96 };
-    const x = Math.min(Math.max(16, pos.x), Math.max(16, window.innerWidth - w - 16));
-    const y = Math.min(Math.max(8, pos.y), Math.max(8, window.innerHeight - Math.min(hgt, 120)));
-    dock.style.left = x + 'px';
-    dock.style.top = y + 'px';
-  }
-
-  function enableDrag(panel, handle) {
-    handle.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || e.target.closest('button')) return;
-      const ox = e.clientX - panel.offsetLeft, oy = e.clientY - panel.offsetTop;
-      handle.setPointerCapture(e.pointerId);
-      const move = (ev) => {
-        panel.style.left = Math.min(Math.max(0, ev.clientX - ox), window.innerWidth - 60) + 'px';
-        panel.style.top = Math.min(Math.max(0, ev.clientY - oy), window.innerHeight - 40) + 'px';
-      };
-      const up = () => {
-        handle.removeEventListener('pointermove', move);
-        handle.removeEventListener('pointerup', up);
-        settings.pos = { x: panel.offsetLeft, y: panel.offsetTop };
-        saveSettings();
-      };
-      handle.addEventListener('pointermove', move);
-      handle.addEventListener('pointerup', up);
-    });
   }
 
   function toggleCollapse() {
     settings.collapsed = !settings.collapsed;
-    saveSettings();
+    // This is per-page UI state; it must not change your saved preferences.
     applyCollapsed();
   }
+
   function applyCollapsed() {
     dock.classList.toggle('tt-collapsed', settings.collapsed);
-    [tabsEl, bodyEl, footEl].forEach((n) => { n.hidden = settings.collapsed; });
+    tabsEl.hidden = settings.collapsed || availableTabs().length < 2;
+    [bodyEl, footEl].forEach((n) => { n.hidden = settings.collapsed; });
     collapseBtn.innerHTML = ICONS[settings.collapsed ? 'down' : 'up'];
-    collapseBtn.title = settings.collapsed ? 'Expand' : 'Collapse';
+    collapseBtn.title = settings.collapsed ? 'Show toolkit' : 'Hide toolkit';
     collapseBtn.setAttribute('aria-label', collapseBtn.title);
+    collapseBtn.setAttribute('aria-expanded', String(!settings.collapsed));
     if (!settings.collapsed) renderActive();
   }
 
@@ -795,7 +815,8 @@
   function renderTabs() {
     const tabs = availableTabs();
     // Open the page's own tool first (target on profiles, gym on the gym page).
-    if (!tabs.includes(activeTab)) activeTab = tabs.find((t) => t === 'target' || t === 'gym') || tabs[0] || null;
+    const preferred = ctx.page === 'gym' ? 'gym' : ctx.targetId ? 'target' : ctx.page === 'travel' ? 'travel' : 'status';
+    if (!tabs.includes(activeTab)) activeTab = tabs.includes(preferred) ? preferred : tabs[0] || null;
     tabsEl.replaceChildren(...(tabs.length > 1 ? tabs.map((id) => h('button', {
       class: 'tt-tab', type: 'button', role: 'tab', 'aria-selected': String(id === activeTab),
       onclick: () => { activeTab = id; renderTabs(); renderActive(); },
@@ -1616,11 +1637,17 @@
 
   // ---------------------------------------------------------------- boot
   function onContextChange() {
+    const previous = ctx;
     ctx = pageContext();
+    if (previous.page !== ctx.page || previous.targetId !== ctx.targetId) {
+      activeTab = null;
+      settings.collapsed = Boolean(getKey()) && !isToolPage(ctx);
+    }
+    mountInlineDock();
     if (settings.target && ctx.targetId && /^\d+$/.test(ctx.targetId) && ctx.targetId !== targetState.id) loadTarget(ctx.targetId);
     if ((settings.jump || settings.ratio) && ctx.page === 'gym' && !gymState.loaded) loadGym();
     renderTabs();
-    renderActive();
+    applyCollapsed();
   }
 
   function boot() {
@@ -1647,7 +1674,15 @@
     if (settings.market) startMarket();
     onContextChange();
     let lastUrl = location.href;
-    setInterval(() => { if (location.href !== lastUrl) { lastUrl = location.href; onContextChange(); } }, 1000);
+    setInterval(() => {
+      if (location.href !== lastUrl) {
+        lastUrl = location.href;
+        onContextChange();
+      } else if (!dock.isConnected || dock.parentElement !== inlineHost()) {
+        // Torn can replace its page container without a full navigation.
+        mountInlineDock();
+      }
+    }, 1000);
   }
 
   try { boot(); } catch (e) { console.error('[Torn Toolkit]', e); }

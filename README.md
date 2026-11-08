@@ -14,15 +14,17 @@ A clean, read-only helper for [Torn](https://www.torn.com) that keeps what you c
 | **Jump planner** | Gym | Reads your gym, its dots and energy per train, your stats and happy. Compares normal training against a happy jump (Ecstasy) or choco jump (candy), with the cheapest candy, its cost and your booster cooldown limit. |
 | **Market values** | Every page | A small badge with the market value next to item images. |
 
-The panel works in Torn's light and dark modes and on phones. It can be dragged and collapsed, and each feature can be turned off in settings (⚙).
+Torn Toolkit integrates into the page instead of using a floating panel. The compact in-page header keeps your energy/nerve summary and Settings (⚙) within reach; click the arrow to expand the full toolkit. Gym, profile/attack, and travel pages automatically open the matching tools. It adapts to narrow screens and touch controls, and each feature can be disabled in Settings.
 
 ## Install
 
 1. Install [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/).
 2. Open the [direct Torn Toolkit installer](https://raw.githubusercontent.com/fl0w-development/Torn-Toolkit/main/torn-toolkit.user.js) and approve **Install** in Tampermonkey/Violentmonkey. If you see the source code instead, use your userscript manager's **Install from URL** option with that same address.
-3. On Torn, click **Add API key** in the panel and paste a **Limited Access** key (see [Which API key you need](#which-api-key-you-need)).
+3. On Torn, expand the **Torn Toolkit** section (if needed), click **Add API key**, and paste a **Limited Access** key (see [Which API key you need](#which-api-key-you-need)). Your key remains saved in the userscript manager's storage after that; you won't need to re-enter it on every page.
 
 If you already pasted the script manually into Tampermonkey, **disable the older copy** when installing from the link above to prevent duplicate panels.
+
+**Mobile browsers:** this is a responsive userscript, not a standalone mobile extension. Install it using a mobile userscript manager (or Torn PDA on supported devices). Mobile browsers without userscript support cannot run it. The inline header is touch-friendly and doesn't cover Torn's action buttons.
 
 **Torn PDA:** add the script under Settings → Userscripts. PDA fills in your key automatically. If live foreign stock can't load there, the Travel tab says so and everything else keeps working.
 
