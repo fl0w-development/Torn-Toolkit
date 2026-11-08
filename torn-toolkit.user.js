@@ -794,7 +794,8 @@
 
   function applyCollapsed() {
     dock.classList.toggle('tt-collapsed', settings.collapsed);
-    [tabsEl, bodyEl, footEl].forEach((n) => { n.hidden = settings.collapsed; });
+    tabsEl.hidden = settings.collapsed || availableTabs().length < 2;
+    [bodyEl, footEl].forEach((n) => { n.hidden = settings.collapsed; });
     collapseBtn.innerHTML = ICONS[settings.collapsed ? 'down' : 'up'];
     collapseBtn.title = settings.collapsed ? 'Show toolkit' : 'Hide toolkit';
     collapseBtn.setAttribute('aria-label', collapseBtn.title);
@@ -1647,7 +1648,6 @@
     if ((settings.jump || settings.ratio) && ctx.page === 'gym' && !gymState.loaded) loadGym();
     renderTabs();
     applyCollapsed();
-    renderActive();
   }
 
   function boot() {
