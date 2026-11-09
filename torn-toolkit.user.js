@@ -183,7 +183,7 @@ const css=[
  " #tc-root .tc-toggle{width:38px;min-width:38px;min-height:40px}",
  "}"
 ].join('');
-const state={tab:'attack',sub:'watch',watchPage:0,chainPage:0,rosterPage:0,rosterSide:'own',rosterQuery:'',collapsed:store.get('combatCollapsed',true)===true,target:null,player:null,playerError:'',own:'',enemy:'',left:null,right:null,warError:'',loading:false};
+const state={view:'watch',lastView:'watch',watchPage:0,chainPage:0,rosterPage:0,rosterSide:'own',rosterQuery:'',collapsed:store.get('combatCollapsed',true)===true,target:null,player:null,playerError:'',own:'',enemy:'',left:null,right:null,warError:'',loading:false};
 const apiCache=new Map(),inflight=new Map(),requests=[];
 async function api(path,params={},ttl=300){
  if(!key())throw Error('Add an API key in Settings');
@@ -275,7 +275,7 @@ function toggleCollapsed(){
  state.collapsed=!state.collapsed;
  store.set('combatCollapsed',state.collapsed);
  applyCollapsed();
- if(!state.collapsed&&state.tab==='attack')render();
+ if(!state.collapsed)render();
 }
 function targetFromUrl(){
  const u=new URL(location.href);
@@ -292,55 +292,67 @@ function host(){
 }
 function mount(){const dest=host();if(root.parentElement!==dest)dest.prepend(root)}
 function showSettings(){
- const previous=root.querySelector('.tc-settings');if(previous){previous.remove();return}
+ state.view=state.view==='settings'?(state.lastView||'watch'):'settings';
+ renderTabs();render();body.scrollTop=0;
+}
+function renderSettings(){
+ body.append(h('div',{class:'tc-view-header'},title('API settings')));
  const input=h('input',{class:'tc-input',type:'password',maxlength:16,disabled:isPda,
   placeholder:isPda?'Torn PDA key connected':'16-character Torn API key',value:isPda?'':key()});
  const message=muted('');
- const form=card(title('API key'),input,muted('Key stays on this device, and is sent only to api.torn.com.'),
-  row(btn('Save',async()=>{
-   if(isPda){form.remove();return}
+ const form=h('div',{class:'tc-settings'},title('Your API key'),input,
+  muted('Stored on this device; requests go to api.torn.com only.'),
+  row(btn('Save key',async()=>{
+   if(isPda){showSettings();return}
    const k=input.value.trim();
    if(k&&!/^[a-z0-9]{16}$/i.test(k)){message.textContent='Enter a 16-character API key';return}
    if(k){
     message.textContent='Verifying…';
-    try{const r=await fetch(API+'key/info?comment=TornToolkit',{headers:{Authorization:'ApiKey '+k}});
-     const d=await r.json();if(!r.ok||d.error)throw Error(d.error&&d.error.error||'Verification failed')}
-    catch(e){message.textContent=String(e.message);return}
+    try{
+     const r=await fetch(API+'key/info?comment=TornToolkit',{headers:{Authorization:'ApiKey '+k}});
+     const d=await r.json();
+     if(!r.ok||d.error)throw Error(d.error&&d.error.error||'Verification failed');
+    }catch(e){message.textContent=String(e.message);return}
     store.set('apiKey',k);
    }else store.del('apiKey');
    location.reload();
-  }),btn('Cancel',()=>form.remove(),true)),message);
- form.classList.add('tc-settings');root.insertBefore(form,body);
+  }),btn('Back',showSettings,true)),message);
+ body.append(form);
+}
+function switchView(view){
+ if(!['watch','chain','war'].includes(view))return;
+ state.view=view;state.lastView=view;renderTabs();render();body.scrollTop=0;
 }
 function renderTabs(){
- tabs.replaceChildren(...[['attack','Attack'],['war','War']].map(([id,label])=>
-  h('button',{type:'button',class:'tc-tab'+(state.tab===id?' selected':''),
-   onclick:()=>{state.tab=id;renderTabs();render()}},label)));
+ tabs.replaceChildren(...[['watch','Targets'],['chain','Chain'],['war','War']].map(([id,label])=>
+  h('button',{type:'button',role:'tab',class:'tc-tab'+(state.view===id?' selected':''),
+   'aria-selected':String(state.view===id),onclick:()=>switchView(id)},label)));
 }
 function render(){
+ const previousScroll=body.scrollTop;
  body.replaceChildren();
  if(headCounts)headCounts.textContent=watchlist().length+' watched · '+chain().length+' queued';
- if(!key())body.append(card(muted('Add an API key to fetch public profiles and faction rosters. Local lists work without a key.'),
-  btn('API settings',showSettings,true)));
- if(state.tab==='attack')renderAttack();else renderWar();
+ if(!key()&&state.view!=='settings')
+  body.append(h('div',{class:'tc-notice'},'Add your API key in Settings to load player conditions and rosters.'));
+ if(state.view==='watch')renderWatchPage();
+ else if(state.view==='chain')renderChain();
+ else if(state.view==='war')renderWar();
+ else renderSettings();
+ body.scrollTop=previousScroll;
 }
-function renderAttack(){
- body.append(h('div',{class:'tc-section'},'Current target'));
+function renderWatchPage(){
  if(state.target){
   const p=state.player&&state.player.profile||{},ps=state.player&&state.player.personalstats||{};
   const est=state.player?estimate(p,ps):null,name=String(p.name||'Player '+state.target);
-  body.append(card(row(main(title(name+' ['+state.target+']'),
-   muted(est?'Estimated battle stats: '+est.label+' · '+est.confidence+' confidence':
-     state.playerError||'Loading public estimate…')),
-   attack(state.target),btn(watchlist().some(x=>x.id===state.target)?'Watching':'+ Watch',
-    ()=>{addWatch(state.target,name);render()},true))));
- }else body.append(muted('Open a player profile or attack page to see a public stat estimate.'));
- const nav=h('div',{class:'tc-tabs'},
-  ...[['watch','Watchlist'],['chain','Solo Chain']].map(([id,label])=>
-    h('button',{type:'button',class:'tc-tab'+(state.sub===id?' selected':''),
-      onclick:()=>{state.sub=id;render()}},label)));
- body.append(nav);
- if(state.sub==='watch')renderWatch();else renderChain();
+  body.append(h('div',{class:'tc-card tc-current'},
+   row(main(title(name+' ['+state.target+']'),
+    muted(est?'Estimated stats: '+est.label+' · '+est.confidence+' confidence':
+     state.playerError||'Checking public stats…')),
+    h('div',{class:'tc-actions'},attack(state.target),
+     btn(watchlist().some(x=>x.id===state.target)?'Saved':'+ Watch',
+      ()=>{addWatch(state.target,name);render()},true)))));
+ }
+ renderWatch();
 }
 function renderWatch(){
  const id=h('input',{class:'tc-input',placeholder:'Player ID',inputmode:'numeric',maxlength:10}),message=muted('');
@@ -370,7 +382,7 @@ function renderWatch(){
     btn('Cancel',()=>{editor.hidden=true},true)));
    return card(row(main(title(x.name+' ['+x.id+']'),statusBadge(x.id),
     muted(x.group+(x.note?' · '+x.note:''))),
-    attack(x.id),btn('Chain +',()=>{saveChain([...chain(),x.id]);state.sub='chain';state.chainPage=0;render()},true),
+    attack(x.id),btn('Chain +',()=>{saveChain([...chain(),x.id]);state.chainPage=0;switchView('chain')},true),
     btn('Edit',()=>{editor.hidden=!editor.hidden},true),
     btn('Remove',()=>{saveWatch(watchlist().filter(t=>t.id!==x.id));render()},true)),editor);
   }));
@@ -443,7 +455,7 @@ function renderWar(){
     ]);
     state.left=members(both[0]);state.right=members(both[1]);
    }catch(e){state.warError=String(e.message)}
-   finally{state.loading=false;if(state.tab==='war')render()}
+   finally{state.loading=false;if(state.view==='war')render()}
   }));
  if(state.loading)body.append(muted('Loading official API roster data…'));
  if(state.warError)body.append(card(muted(state.warError)));
@@ -471,7 +483,7 @@ async function loadTarget(id){
   if(state.target!==id)return;
   state.player={profile:data[0].profile||data[0],personalstats:data[1].personalstats||data[1]};
  }catch(e){if(state.target===id)state.playerError=String(e.message)}
- if(state.tab==='attack'&&state.target===id)render();
+ if(state.view==='watch'&&state.target===id)render();
 }
 function boot(){
  if(document.getElementById('tc-root'))return;
