@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Toolkit — Combat Edition
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      0.6.0
+// @version      0.6.1
 // @description  Manual target watchlists, solo chain lists and read-only faction rosters. No gameplay automation.
 // @author       fl0w-development
 // @copyright    Copyright (c) 2026 fl0w-development
@@ -17,7 +17,7 @@
 // ==/UserScript==
 (function(){
 'use strict';
-const VER='0.6.0',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
+const VER='0.6.1',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
 const isPda=!PDA.includes('#'),hasGM=typeof GM_getValue==='function'&&typeof GM_setValue==='function';
 const store={
  get(k,f){try{if(hasGM)return GM_getValue(k,f);const v=localStorage.getItem('tt_'+k);return v==null?f:JSON.parse(v)}catch(_){return f}},
@@ -274,6 +274,8 @@ const css=[
  " #tc-root .tc-toggle{min-width:38px;width:38px}",
  " #tc-root .tc-settings-btn{min-width:56px}",
  " #tc-root .tc-card{padding:11px}",
+ " #tc-root .tc-tabs{padding:5px;gap:2px}",
+ " #tc-root .tc-tab{padding:7px 3px;min-height:42px;font-size:10px}",
  "}",
  "@media(prefers-reduced-motion:reduce){",
  " #tc-root::before,#tc-root::after{animation:none;will-change:auto;opacity:.32}",
@@ -281,7 +283,7 @@ const css=[
  " #tc-root .tc-switch input::after{transition:none}",
  "}"
 ].join('');
-const state={view:'watch',lastView:'watch',watchPage:0,chainPage:0,rosterPage:0,rosterSide:'own',rosterQuery:'',collapsed:store.get('combatCollapsed',true)===true,target:null,player:null,playerError:'',own:'',enemy:'',left:null,right:null,warError:'',loading:false};
+const state={view:'watch',lastView:'watch',watchPage:0,chainPage:0,factionPage:0,rosterPage:0,rosterSide:'own',rosterQuery:'',collapsed:store.get('combatCollapsed',true)===true,target:null,player:null,playerError:'',own:'',enemy:'',left:null,right:null,warError:'',loading:false};
 const apiCache=new Map(),inflight=new Map(),requests=[];
 async function api(path,params={},ttl=300){
  if(!key())throw Error('Add an API key in Settings');
@@ -449,11 +451,12 @@ function renderSettings(){
   auroraToggle));
 }
 function switchView(view){
- if(!['watch','chain','war'].includes(view))return;
+ if(!['watch','chain','faction','war'].includes(view))return;
  state.view=view;state.lastView=view;renderTabs();render();body.scrollTop=0;
+ if(view==='faction'&&connectedFaction()&&!factionState.plan)void refreshFactionPlan();
 }
 function renderTabs(){
- tabs.replaceChildren(...[['watch','Targets'],['chain','Chain'],['war','War']].map(([id,label])=>
+ tabs.replaceChildren(...[['watch','Targets'],['chain','Solo Chain'],['faction','Faction Chain'],['war','War']].map(([id,label])=>
   h('button',{type:'button',role:'tab',class:'tc-tab'+(state.view===id?' selected':''),
    'aria-selected':String(state.view===id),onclick:()=>switchView(id)},label)));
 }
@@ -468,6 +471,7 @@ function render(){
   body.append(h('div',{class:'tc-notice'},'Add your API key in Settings to load player conditions and rosters.'));
  if(state.view==='watch')renderWatchPage();
  else if(state.view==='chain')renderChain();
+ else if(state.view==='faction')renderFactionChain();
  else if(state.view==='war')renderWar();
  else renderSettings();
  body.scrollTop=previousScroll;
