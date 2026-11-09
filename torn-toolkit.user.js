@@ -455,16 +455,16 @@ function renderChain(){
  enqueueStatuses(visibleIds);
 }
 function renderWar(){
- body.append(h('div',{class:'tc-section'},'Faction rosters'),
-  muted('Read-only roster viewer. Manually load two factions; shared plans and leadership editing are not active.'));
+ body.append(h('div',{class:'tc-view-header'},title('Faction rosters'),muted('Read-only · manual actions')));
  const own=h('input',{class:'tc-input',placeholder:'Your faction ID',inputmode:'numeric',value:state.own});
  const enemy=h('input',{class:'tc-input',placeholder:'Enemy faction ID',inputmode:'numeric',value:state.enemy});
  body.append(h('div',{class:'tc-grid'},own,enemy),
-  btn(state.loading?'Loading…':'Load rosters',async()=>{
+  btn(state.loading?'Loading…':'Load factions',async()=>{
    if(state.loading)return;
-   if(!good(own.value)||!good(enemy.value)){state.warError='Enter both valid faction IDs';render();return}
+   if(!good(own.value)||!good(enemy.value)){state.warError='Enter valid IDs for both factions';render();return}
    state.own=norm(own.value);state.enemy=norm(enemy.value);state.loading=true;
-   state.warError='';state.left=null;state.right=null;render();
+   state.warError='';state.left=null;state.right=null;
+   state.rosterSide='own';state.rosterPage=0;state.rosterQuery='';render();
    try{
     const both=await Promise.all([
      api('faction/'+state.own+'/members',{},300),
@@ -474,20 +474,46 @@ function renderWar(){
    }catch(e){state.warError=String(e.message)}
    finally{state.loading=false;if(state.view==='war')render()}
   }));
- if(state.loading)body.append(muted('Loading official API roster data…'));
- if(state.warError)body.append(card(muted(state.warError)));
+ if(state.loading)body.append(muted('Loading official Torn faction data…'));
+ if(state.warError)body.append(h('div',{class:'tc-notice'},state.warError));
  if(state.left&&state.right){
-  const roster=(label,people)=>{
-   const list=h('div',{class:'tc-roster'});
-   people.forEach(p=>list.append(card(row(main(title(p.name+' ['+p.id+']'),
-    muted('Level '+p.level+' · '+p.status)),attack(p.id)))));
-   return h('div',{},h('div',{class:'tc-section'},label+' ('+people.length+')'),list);
+  const selectors=h('div',{class:'tc-tabs'},...[
+   ['own','Your faction ('+state.left.length+')'],
+   ['enemy','Enemy ('+state.right.length+')']
+  ].map(([side,label])=>h('button',{type:'button',
+   class:'tc-tab'+(state.rosterSide===side?' selected':''),
+   onclick:()=>{
+    state.rosterSide=side;state.rosterPage=0;state.rosterQuery='';search.value='';paint();
+   }},label)));
+  const search=h('input',{class:'tc-input',placeholder:'Search roster by name or ID',value:state.rosterQuery});
+  const list=h('div'),pager=h('div',{class:'tc-pager'}),total=muted('');
+  body.append(selectors,search,total,list,pager);
+  const paint=()=>{
+   const buttons=selectors.querySelectorAll('button');
+   buttons[0].classList.toggle('selected',state.rosterSide==='own');
+   buttons[1].classList.toggle('selected',state.rosterSide==='enemy');
+   const all=state.rosterSide==='own'?state.left:state.right;
+   const q=state.rosterQuery.trim().toLowerCase();
+   const filtered=all.filter(p=>p.name.toLowerCase().includes(q)||p.id.includes(q));
+   const page=pageSlice(filtered,state.rosterPage,5);
+   state.rosterPage=page.page;
+   total.textContent=filtered.length+' member'+(filtered.length===1?'':'s')+' · page '+(page.page+1)+' of '+page.pages;
+   list.replaceChildren(...page.items.map(p=>
+    h('div',{class:'tc-roster-row'},
+     row(main(title(p.name+' ['+p.id+']'),muted('Level '+p.level+' · '+p.status)),attack(p.id)))));
+   if(!filtered.length)list.append(h('div',{class:'tc-empty'},'No matching faction members.'));
+   pager.hidden=page.pages===1;
+   pager.replaceChildren(
+    btn('← Prev',()=>{state.rosterPage--;paint()},true),
+    muted((page.page+1)+' / '+page.pages),
+    btn('Next →',()=>{state.rosterPage++;paint()},true));
+   pager.querySelectorAll('button')[0].disabled=page.page===0;
+   pager.querySelectorAll('button')[1].disabled=page.page===page.pages-1;
   };
-  body.append(h('div',{class:'tc-grid rosters'},roster('Your faction',state.left),roster('Enemy faction',state.right)));
-  body.append(muted('Roster entries are not verified battle-stat reports. Visit profiles for conservative rank estimates.'));
+  search.addEventListener('input',()=>{state.rosterQuery=search.value;state.rosterPage=0;paint()});
+  paint();
  }
- body.append(card(title('War Planner Pro — upcoming'),
-  muted('Shared chain orders, leadership-only editing, and assignments need a secure VPS backend. No insecure local role simulation.')));
+ body.append(muted('Roster data is public API information, not verified battle stats. Shared war planning is not enabled.'));
 }
 async function loadTarget(id){
  state.player=null;state.playerError='';render();
