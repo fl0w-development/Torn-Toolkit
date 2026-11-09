@@ -78,7 +78,12 @@ function parseStatus(response){
  const seconds=Number(status.until);
  return {state,description,until:Number.isFinite(seconds)&&seconds>0?seconds:null,availability:availability(state)};
 }
-const pure={good,norm,url,number,estimate,members,move,removeHitAt,availability,parseStatus};
+function pageSlice(items,index,size){
+ const limit=Math.max(1,Math.floor(size)||1),pages=Math.max(1,Math.ceil(items.length/limit));
+ const page=Math.max(0,Math.min(Number.isInteger(index)?index:0,pages-1)),start=page*limit;
+ return {page,pages,start,items:items.slice(start,start+limit)};
+}
+const pure={good,norm,url,number,estimate,members,move,removeHitAt,availability,parseStatus,pageSlice};
 if(typeof module!=='undefined'&&module.exports){module.exports=pure;return}
 function h(tag,attrs={},...kids){
  const n=document.createElement(tag);
@@ -178,7 +183,7 @@ const css=[
  " #tc-root .tc-toggle{width:38px;min-width:38px;min-height:40px}",
  "}"
 ].join('');
-const state={tab:'attack',sub:'watch',watchPage:0,chainPage:0,collapsed:store.get('combatCollapsed',false)===true,target:null,player:null,playerError:'',own:'',enemy:'',left:null,right:null,warError:'',loading:false};
+const state={tab:'attack',sub:'watch',watchPage:0,chainPage:0,rosterPage:0,rosterSide:'own',rosterQuery:'',collapsed:store.get('combatCollapsed',true)===true,target:null,player:null,playerError:'',own:'',enemy:'',left:null,right:null,warError:'',loading:false};
 const apiCache=new Map(),inflight=new Map(),requests=[];
 async function api(path,params={},ttl=300){
  if(!key())throw Error('Add an API key in Settings');
@@ -197,7 +202,7 @@ async function api(path,params={},ttl=300){
  inflight.set(ident,pending);try{return await pending}finally{inflight.delete(ident)}
 }
 // Status checks only run for a visible list page or explicit refresh.
-const statusCache=new Map(),statusQueue=new Map(),STATUS_TTL=90000,STATUS_PAGE_SIZE=10;
+const statusCache=new Map(),statusQueue=new Map(),STATUS_TTL=90000,STATUS_PAGE_SIZE=5;
 let statusBusy=false,checkingStatusId=null;
 function statusLabel(id){
  const entry=statusCache.get(id);
@@ -258,7 +263,7 @@ async function processStatusQueue(){
   }
  }finally{statusBusy=false}
 }
-let root,body,tabs,collapseBtn;
+let root,body,tabs,collapseBtn,headCounts;
 function applyCollapsed(){
  root.classList.toggle('tc-collapsed',state.collapsed);
  collapseBtn.textContent=state.collapsed?'▾':'▴';
@@ -314,6 +319,7 @@ function renderTabs(){
 }
 function render(){
  body.replaceChildren();
+ if(headCounts)headCounts.textContent=watchlist().length+' watched · '+chain().length+' queued';
  if(!key())body.append(card(muted('Add an API key to fetch public profiles and faction rosters. Local lists work without a key.'),
   btn('API settings',showSettings,true)));
  if(state.tab==='attack')renderAttack();else renderWar();
@@ -474,12 +480,13 @@ function boot(){
  collapseBtn=btn('▴',toggleCollapsed,true);
  collapseBtn.classList.add('tc-toggle');
  collapseBtn.setAttribute('aria-controls','tc-tabs tc-body');
+ headCounts=h('span',{class:'tc-count'},'');
  root=h('section',{id:'tc-root','aria-label':'Torn Toolkit Combat Edition'},
-  h('div',{class:'tc-head'},title('Torn Toolkit'),muted('Combat · '+VER),
-   h('span',{style:'flex:1'}),
+  h('div',{class:'tc-head'},h('div',{class:'tc-brand'},title('Torn Toolkit'),muted('Combat edition · v'+VER)),
+   h('span',{style:'flex:1'}),headCounts,
    h('button',{type:'button',class:'tc-btn tc-soft tc-settings-btn',onclick:showSettings},'Settings'),
    collapseBtn),
-  tabs,body,h('div',{class:'tc-muted tc-foot',style:'padding:7px 12px;border-top:1px solid #3a4752'},'Manual actions only'));
+  tabs,body);
  applyCollapsed();mount();renderTabs();state.target=targetFromUrl();render();loadTarget(state.target);
  let last=location.href;
  setInterval(()=>{
