@@ -1,6 +1,6 @@
 # Torn Toolkit — Combat Edition
 
-**Version 0.5.5** · A small, manual combat companion userscript for [Torn](https://www.torn.com). No external website or VPS is needed for this release.
+**Version 0.6.0** · A small, manual combat companion userscript for [Torn](https://www.torn.com). No external website or VPS is needed for this release.
 
 ## Install
 1. Install a supported userscript manager (Tampermonkey, Violentmonkey, or Torn PDA if compatible).
@@ -10,7 +10,7 @@
 
 ## Compact workspace
 
-Torn Toolkit now stays inside a **640px-wide, bounded panel**, rather than becoming a very long full-width section that pushes Torn's content down the page. On desktop the content area is capped at **405px** (or 55% of the viewport height, whichever is smaller); mobile uses a smaller cap. When a list grows, scroll **inside the toolkit** instead of scrolling through thousands of pixels of Torn's page.
+Torn Toolkit now stays inside a **660px-wide, bounded panel**, rather than becoming a very long full-width section that pushes Torn's content down the page. On desktop the content area is capped at **406px** (or 55% of the viewport height, whichever is smaller); mobile uses a smaller cap. When a list grows, scroll **inside the toolkit** instead of scrolling through thousands of pixels of Torn's page.
 
 - One row of tabs: **Targets**, **Chain**, and **War**. Settings opens *inside the same bounded panel* from the header.
 - The **up arrow (▴)** collapses the toolkit to a slim title bar; **down arrow (▾)** expands it. New installs start collapsed to keep Torn uncluttered, while previously saved open/closed preferences are preserved.
@@ -18,9 +18,17 @@ Torn Toolkit now stays inside a **640px-wide, bounded panel**, rather than becom
 - Watchlist entries and faction members are shown in **five-item pages**, with search. The Chain tab keeps the current hit prominently visible and displays up to **four upcoming hits per page**.
 - Lists never lose entries merely because they are on another page. A previously saved watchlist or chain is not cleared by this UI update.
 
-## Appearance
+## Aurora command center — v0.6.0
 
-A compact charcoal and neutral-slate utility style with refined borders, clearer typography, quiet status dots, and a restrained red Attack button. It is responsive on mobile and keeps Torn's original pages accessible.
+A major visual redesign rather than another gray card reskin:
+
+- A midnight-blue, translucent-glass panel with **two slow, layered aurora-borealis effects** in teal, violet, and blue. The moving light is pure CSS, so the toolkit makes **no additional network requests or image downloads**.
+- A distinctive **T** emblem, compact command header, small target/queue counters, and three prominent navigation tabs.
+- Softly illuminated action buttons, restrained luminous condition dots, and a highlighted current target. Readable text sits above the ambient effect.
+- Choose **Settings → Aurora ambience** to turn the visual effect on or off. The preference is stored on your device, and `prefers-reduced-motion` users receive a subtle, **static** glow rather than animation.
+- The bounded layout remains intact: maximum desktop width **660px**, scrollable inner area at most **406px or 55vh**, and a smaller mobile cap. It does **not** extend Torn's page for long lists.
+
+The original public-data and manual-combat behavior remains unchanged. The toolkit does not animate Torn's game UI, only its own decorative background. Status details can be seen by hovering a condition label, while the concise condition remains visible in the row.
 
 ## Targets and Chain tabs
 
