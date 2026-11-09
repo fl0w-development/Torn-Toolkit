@@ -38,6 +38,10 @@ The original public-data and manual-combat behavior remains unchanged. The toolk
 - **Attack:** Only opens Torn's native attack page when clicked. The toolkit never automatically attacks, consumes items, or plays for the user.
 - Watchlists and solo chain entries remain in the browser under `combatWatchlist` and `combatSoloChain`; no account sync or cloud backup is included.
 
+## Tests
+
+The default `npm test` command runs current Combat Edition tests from the `tests/` folder. The older `test/logic.test.js` suite documents superseded travel/gym modules and can be examined with `npm run test:legacy`, but is **not expected to pass against Combat Edition** because those features were intentionally removed in v0.5.0. Backend permissions are tested separately with `python -m unittest discover -s server -p 'test_*.py' -v`.
+
 ## Faction Chain — optional shared order
 
 The new **Faction Chain** tab lets a verified Torn faction leader/co-leader create and publish a numbered list of targets, rearrange the order, or import their own private Solo Chain as a draft. Members of that same faction can view the published plan, check recent public target conditions, and open **manual Attack** links, but **cannot edit or publish** the plan. A saved plan is shared through a separate HTTPS server and refreshed about once a minute while the tab is open. No attack automation is involved.
