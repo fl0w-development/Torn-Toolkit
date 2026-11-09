@@ -382,6 +382,100 @@ async function processStatusQueue(){
   }
  }finally{statusBusy=false}
 }
+// Optional shared faction chain: local private solo chain stays independent.
+const factionState={plan:null,draft:null,draftRevision:0,loading:false,busy:false,error:'',lastFetch:0};
+function validateServiceUrl(value){
+ try{
+  const parsed=new URL(String(value||'').trim());
+  if(parsed.protocol!=='https:'||parsed.username||parsed.password||parsed.search||parsed.hash||
+     (parsed.pathname!=='/'&&parsed.pathname!==''))return null;
+  return parsed.origin;
+ }catch(_){return null}
+}
+function factionBase(){return validateServiceUrl(store.get('factionServiceUrl',''))}
+function connectedFaction(){
+ const info=store.get('factionSession',null),base=factionBase();
+ return info&&base&&info.server===base&&typeof info.token==='string'&&info.token.length>20&&
+  Number(info.expires_at)>Date.now()/1000+5?info:null;
+}
+function disconnectFaction(){
+ store.del('factionSession');factionState.plan=null;factionState.draft=null;
+ factionState.lastFetch=0;factionState.error='';if(state.view==='faction')render();
+}
+async function factionRequest(route,method='GET',data=null,token=null){
+ const base=factionBase();
+ if(!base)throw Error('Configure the faction service HTTPS address in Settings.');
+ const headers={'Accept':'application/json'};
+ if(data!==null)headers['Content-Type']='application/json';
+ if(token)headers.Authorization='Bearer '+token;
+ let response;
+ try{
+  response=await fetch(base+route,{method,headers,mode:'cors',credentials:'omit',
+   cache:'no-store',body:data===null?undefined:JSON.stringify(data)});
+ }catch(_){throw Error('Faction service unreachable. Verify the HTTPS address and CORS settings.')}
+ let result;
+ try{result=await response.json()}catch(_){throw Error('Faction service returned an invalid response.')}
+ if(!response.ok){
+  const error=new Error(String(result.error||'Faction service error').slice(0,170));
+  error.status=response.status;throw error;
+ }
+ return result;
+}
+async function connectFaction(){
+ if(factionState.busy)return;
+ if(!key()){factionState.error='Add your Torn API key in Settings first.';render();return}
+ factionState.busy=true;factionState.error='';render();
+ try{
+  // Explicit opt-in: sends existing Torn API key once over HTTPS for Torn-backed verification.
+  const result=await factionRequest('/v1/session','POST',{key:key()});
+  if(typeof result.token!=='string'||!good(result.user_id)||!good(result.faction_id)||
+     !Number.isFinite(Number(result.expires_at)))throw Error('Faction login response was invalid.');
+  store.set('factionSession',{server:factionBase(),token:result.token,
+   user_id:result.user_id,faction_id:result.faction_id,editor:result.editor===true,
+   expires_at:result.expires_at});
+  factionState.plan=null;
+ }catch(e){factionState.error=String(e.message||e)}
+ finally{factionState.busy=false;render()}
+ if(connectedFaction())void refreshFactionPlan();
+}
+async function refreshFactionPlan(){
+ const session=connectedFaction();
+ if(!session||factionState.loading)return;
+ factionState.loading=true;factionState.error='';render();
+ try{
+  const result=await factionRequest('/v1/plan','GET',null,session.token);
+  if(result.faction_id!==session.faction_id)throw Error('Faction identity mismatch. Reconnect.');
+  if(!Array.isArray(result.entries)||!Number.isInteger(result.revision))throw Error('Invalid faction plan data.');
+  factionState.plan={...result,entries:result.entries.filter(x=>x&&good(x.id)).map(x=>({id:norm(x.id)}))};
+  factionState.lastFetch=Date.now();
+ }catch(e){
+  factionState.error=String(e.message||e);
+  if(e.status===401){store.del('factionSession');factionState.plan=null;factionState.draft=null}
+ }finally{factionState.loading=false;if(state.view==='faction')render()}
+}
+function startFactionDraft(){
+ const session=connectedFaction(),plan=factionState.plan;
+ if(!session||!session.editor||!plan)return;
+ factionState.draft=plan.entries.map(x=>({...x}));
+ factionState.draftRevision=plan.revision;state.factionPage=0;render();
+}
+async function publishFactionDraft(){
+ const session=connectedFaction();
+ if(!session||!session.editor||!factionState.draft||factionState.busy)return;
+ factionState.busy=true;factionState.error='';render();
+ try{
+  const result=await factionRequest('/v1/plan','PUT',{
+   revision:factionState.draftRevision,entries:factionState.draft
+  },session.token);
+  if(!Array.isArray(result.entries)||!Number.isInteger(result.revision))throw Error('Invalid publish response.');
+  factionState.plan=result;factionState.draft=null;factionState.lastFetch=Date.now();
+  state.factionPage=0;
+ }catch(e){
+  factionState.error=String(e.message||e);
+  if(e.status===401){store.del('factionSession');factionState.plan=null;factionState.draft=null}
+ }finally{factionState.busy=false;if(state.view==='faction')render()}
+}
+
 let root,body,tabs,collapseBtn,headCounts;
 function applyCollapsed(){
  root.classList.toggle('tc-collapsed',state.collapsed);
