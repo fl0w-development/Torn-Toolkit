@@ -1,6 +1,6 @@
 {
   "name": "torn-toolkit",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "description": "Manual Torn combat companion: local watchlists, solo chain lists, public faction rosters",
   "scripts": {

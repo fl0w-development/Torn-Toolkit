@@ -1,12 +1,17 @@
 # Torn Toolkit — Combat Edition
 
-**Version 0.5.0** · A small, manual combat companion userscript for [Torn](https://www.torn.com). No external website or VPS is needed for this release.
+**Version 0.5.1** · A small, manual combat companion userscript for [Torn](https://www.torn.com). No external website or VPS is needed for this release.
 
 ## Install
 1. Install a supported userscript manager (Tampermonkey, Violentmonkey, or Torn PDA if compatible).
 2. [Install the latest userscript](https://raw.githubusercontent.com/fl0w-development/Torn-Toolkit/main/torn-toolkit.user.js).
 3. Add your Torn API key under **API settings**. Existing keys from prior Torn Toolkit versions remain locally stored.
 4. Disable duplicate copies of earlier Torn Toolkit scripts in your userscript manager.
+
+## Compact menu
+- Click the **up arrow (▴)** in the toolkit header to collapse the Attack/War menu to a slim title bar.
+- Click the **down arrow (▾)** to expand it again. The API Settings button is available while expanded.
+- Your collapsed/expanded choice is saved on this device and kept across Torn page changes and reloads.
 
 ## Attack tab
 - **Current target:** On a player profile or attack page, show the player's public rank-based **battle-stat estimate**, with an explicit low-confidence label or missing-data warning.
