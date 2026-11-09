@@ -115,7 +115,7 @@ def create_session(key: str, ip: str) -> dict:
         attempts = _login_attempts[ip]
         while attempts and now - attempts[0] >= 60:
             attempts.popleft()
-        if len(attempts) >= 30:
+        if len(attempts) >= 120:
             raise ServiceError(429, "Too many connection attempts. Try again shortly.")
         attempts.append(now)
     identity = verify_key(key)
