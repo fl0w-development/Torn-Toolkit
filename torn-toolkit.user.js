@@ -514,7 +514,7 @@ function renderSettings(){
   placeholder:isPda?'Torn PDA key connected':'16-character Torn API key',value:isPda?'':key()});
  const message=muted('');
  const form=h('div',{class:'tc-settings'},title('Your API key'),input,
-  muted('Stored on this device; requests go to api.torn.com only.'),
+  muted('Your key stays on this device for standard features. Optional Faction Chain login sends it once to the HTTPS faction service you configure.'),
   row(btn('Save key',async()=>{
    if(isPda){showSettings();return}
    const k=input.value.trim();
@@ -543,6 +543,21 @@ function renderSettings(){
   h('div',{},title('Aurora ambience'),
    muted('Slow, atmospheric background lighting · respects reduced-motion preferences')),
   auroraToggle));
+ const serviceInput=h('input',{class:'tc-input',placeholder:'https://your-faction-service.example',
+  value:store.get('factionServiceUrl',''),type:'url'});
+ const serviceMessage=muted('');
+ body.append(h('div',{class:'tc-settings'},
+  title('Faction Chain service'),
+  muted('Optional, configured by your leader. Use its HTTPS domain only. Connecting from Faction Chain sends your API key to that server for verification; it is never sent just by saving this URL.'),
+  serviceInput,
+  row(btn('Save service',()=>{
+   const entered=serviceInput.value.trim(),valid=entered?validateServiceUrl(entered):'';
+   if(entered&&!valid){serviceMessage.textContent='Enter an HTTPS address with no path, query or password.';return}
+   store.set('factionServiceUrl',valid);
+   store.del('factionSession');factionState.plan=null;factionState.draft=null;
+   serviceMessage.textContent=valid?'Saved. Open Faction Chain to connect.':'Faction service disconnected.';
+  },true)),
+  serviceMessage));
 }
 function switchView(view){
  if(!['watch','chain','faction','war'].includes(view))return;
@@ -880,6 +895,11 @@ function boot(){
   if(!root.isConnected||root.parentElement!==host())mount();
  },1500);
  setInterval(()=>{if(!document.hidden&&!state.collapsed)updateStatusNodes()},15000);
+ setInterval(()=>{
+  if(state.view==='faction'&&!state.collapsed&&!document.hidden&&
+   connectedFaction()&&!factionState.draft&&!factionState.loading&&!factionState.busy&&
+   Date.now()-factionState.lastFetch>60000)void refreshFactionPlan();
+ },60000);
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});
 else boot();
