@@ -355,24 +355,28 @@ function renderWatchPage(){
  renderWatch();
 }
 function renderWatch(){
- const id=h('input',{class:'tc-input',placeholder:'Player ID',inputmode:'numeric',maxlength:10}),message=muted('');
+ body.append(h('div',{class:'tc-view-header'},title('Target watchlist'),
+  muted(watchlist().length+' saved · statuses checked when viewed')));
+ const id=h('input',{class:'tc-input',placeholder:'Add Torn player ID',inputmode:'numeric',maxlength:10}),message=muted('');
  body.append(row(main(id),btn('Add target',()=>{
-  if(addWatch(id.value)){state.watchPage=0;render()}else message.textContent='Enter a valid numeric player ID';
+  if(addWatch(id.value)){state.watchPage=0;render();body.scrollTop=0}
+  else message.textContent='Enter a valid numeric player ID';
  })),message);
- const search=h('input',{class:'tc-input',placeholder:'Search name or ID'});
+ const search=h('input',{class:'tc-input',placeholder:'Find name or ID'});
  const group=h('select',{class:'tc-input'},...['All','General','Farm','Chain','Rival','Other'].map(g=>h('option',{value:g},g)));
- const list=h('div'),pager=h('div',{class:'tc-pager'});let visibleIds=[];
+ const list=h('div'),pager=h('div',{class:'tc-pager'}),summary=muted('');
+ let visibleIds=[];
  body.append(h('div',{class:'tc-grid'},search,group),
-  row(btn('Refresh shown conditions',()=>enqueueStatuses(visibleIds,true),true),muted('Up to 10 visible targets at a time')),
-  list,pager,muted('Conditions are recent API snapshots, not guaranteed attack eligibility. Lists stay on this device.'));
+  row(btn('Refresh conditions',()=>enqueueStatuses(visibleIds,true),true),summary),
+  list,pager);
  const paint=()=>{
   const q=search.value.toLowerCase(),filtered=watchlist().filter(x=>
    (group.value==='All'||x.group===group.value)&&(x.name.toLowerCase().includes(q)||x.id.includes(q)));
-  const pages=Math.max(1,Math.ceil(filtered.length/STATUS_PAGE_SIZE));
-  state.watchPage=Math.max(0,Math.min(state.watchPage,pages-1));
-  const start=state.watchPage*STATUS_PAGE_SIZE,visible=filtered.slice(start,start+STATUS_PAGE_SIZE);
-  visibleIds=visible.map(x=>x.id);
-  list.replaceChildren(...visible.map(x=>{
+  const page=pageSlice(filtered,state.watchPage,STATUS_PAGE_SIZE);
+  state.watchPage=page.page;
+  visibleIds=page.items.map(x=>x.id);
+  summary.textContent=filtered.length+' result'+(filtered.length===1?'':'s')+' · API snapshots';
+  list.replaceChildren(...page.items.map(x=>{
    const editor=h('div',{hidden:true}),category=h('select',{class:'tc-input'},
     ...['General','Farm','Chain','Rival','Other'].map(g=>h('option',{value:g,selected:g===x.group},g)));
    const note=h('textarea',{class:'tc-input',rows:2,maxlength:200});note.value=x.note;
@@ -380,19 +384,23 @@ function renderWatch(){
     row(btn('Save',()=>{const all=watchlist(),current=all.find(t=>t.id===x.id);
      if(current){current.group=category.value;current.note=note.value.slice(0,200);saveWatch(all)}render()}),
     btn('Cancel',()=>{editor.hidden=true},true)));
-   return card(row(main(title(x.name+' ['+x.id+']'),statusBadge(x.id),
-    muted(x.group+(x.note?' · '+x.note:''))),
-    attack(x.id),btn('Chain +',()=>{saveChain([...chain(),x.id]);state.chainPage=0;switchView('chain')},true),
-    btn('Edit',()=>{editor.hidden=!editor.hidden},true),
-    btn('Remove',()=>{saveWatch(watchlist().filter(t=>t.id!==x.id));render()},true)),editor);
+   const entry=card(row(main(title(x.name+' ['+x.id+']'),statusBadge(x.id),
+     muted(x.group+(x.note?' · '+x.note:''))),
+    h('div',{class:'tc-actions'},attack(x.id),
+     btn('+ Chain',()=>{saveChain([...chain(),x.id]);state.chainPage=0;switchView('chain')},true),
+     btn('Edit',()=>{editor.hidden=!editor.hidden},true),
+     btn('Remove',()=>{saveWatch(watchlist().filter(t=>t.id!==x.id));render()},true))),editor);
+   entry.classList.add('tc-entry');
+   return entry;
   }));
-  if(!filtered.length)list.append(muted('No matching targets.'));
+  if(!filtered.length)list.append(h('div',{class:'tc-empty'},'No targets found.'));
+  pager.hidden=page.pages===1;
   pager.replaceChildren(
-   btn('◀ Previous',()=>{if(state.watchPage>0){state.watchPage--;paint()}},true),
-   muted('Page '+(state.watchPage+1)+' of '+pages+' · '+filtered.length+' target(s)'),
-   btn('Next ▶',()=>{if(state.watchPage<pages-1){state.watchPage++;paint()}},true));
-  pager.querySelectorAll('button')[0].disabled=state.watchPage===0;
-  pager.querySelectorAll('button')[1].disabled=state.watchPage===pages-1;
+   btn('← Prev',()=>{state.watchPage--;paint()},true),
+   muted((page.page+1)+' / '+page.pages),
+   btn('Next →',()=>{state.watchPage++;paint()},true));
+  pager.querySelectorAll('button')[0].disabled=page.page===0;
+  pager.querySelectorAll('button')[1].disabled=page.page===page.pages-1;
   enqueueStatuses(visibleIds);
  };
  search.addEventListener('input',()=>{state.watchPage=0;paint()});
@@ -400,41 +408,50 @@ function renderWatch(){
  paint();
 }
 function renderChain(){
- body.append(muted('Manual solo hit order. Duplicate targets allowed; no automatic attacks.'));
- const id=h('input',{class:'tc-input',placeholder:'Player ID to add',inputmode:'numeric',maxlength:10}),error=muted('');
- body.append(row(main(id),btn('Add hit',()=>{
-  if(!good(id.value)){error.textContent='Enter a valid numeric player ID';return}
-  saveChain([...chain(),norm(id.value)]);render();
+ const items=chain(),nameOf=target=>watchlist().find(x=>x.id===target)?.name||'Player '+target;
+ body.append(h('div',{class:'tc-view-header'},title('Solo chain'),
+  muted(items.length+' queued · manual attacks only')));
+ if(items.length){
+  const current=items[0];
+  body.append(h('div',{class:'tc-card tc-current'},
+   h('div',{class:'tc-section'},'CURRENT TARGET · #1'),
+   row(main(title(nameOf(current)+' ['+current+']'),statusBadge(current)),
+    h('div',{class:'tc-actions'},attack(current),
+     btn('Skip target',()=>{saveChain(removeHitAt(chain(),0));state.chainPage=0;render();body.scrollTop=0},true))),
+   muted('Skip removes this hit only; the watchlist stays intact.')));
+ }else body.append(h('div',{class:'tc-empty'},'No hits queued. Add a player ID below or choose + Chain from Targets.'));
+ const id=h('input',{class:'tc-input',placeholder:'Queue player ID',inputmode:'numeric',maxlength:10}),error=muted('');
+ body.append(row(main(id),btn('Queue hit',()=>{
+  if(!good(id.value)){error.textContent='Enter a valid player ID';return}
+  saveChain([...chain(),norm(id.value)]);render();body.scrollTop=0;
  })),error);
- const items=chain();if(!items.length){body.append(muted('No planned hits yet.'));return}
- const nameOf=target=>watchlist().find(x=>x.id===target)?.name||'Player '+target;
- const current=items[0];
- body.append(h('div',{class:'tc-card tc-current'},h('div',{class:'tc-section'},'Current chain target'),
-  row(main(title(nameOf(current)+' ['+current+']'),statusBadge(current)),
-   attack(current),btn('Skip current target',()=>{saveChain(removeHitAt(chain(),0));state.chainPage=0;render()},true)),
-  muted('Skipping removes this hit only. The watchlist entry stays saved.')));
- const rest=items.slice(1),pages=Math.max(1,Math.ceil(rest.length/9));
- state.chainPage=Math.max(0,Math.min(state.chainPage,pages-1));
- const start=state.chainPage*9,visible=rest.slice(start,start+9);
+ if(!items.length)return;
+ const rest=items.slice(1),page=pageSlice(rest,state.chainPage,4);
+ state.chainPage=page.page;
+ const visibleIds=[items[0],...page.items],list=h('div');
  if(rest.length)body.append(h('div',{class:'tc-section'},'UPCOMING HITS'));
- visible.forEach((target,j)=>{
-  const i=start+j+1;
-  body.append(card(row(muted('#'+(i+1)),main(title(nameOf(target)+' ['+target+']'),statusBadge(target)),
-   attack(target),btn('↑',()=>{saveChain(move(chain(),i,-1));render()},true),
-   btn('↓',()=>{saveChain(move(chain(),i,1));render()},true),
-   btn('Remove hit',()=>{saveChain(removeHitAt(chain(),i));render()},true))));
+ page.items.forEach((target,j)=>{
+  const index=page.start+j+1;
+  const entry=card(row(muted('#'+(index+1)),
+   main(title(nameOf(target)+' ['+target+']'),statusBadge(target)),
+   h('div',{class:'tc-actions'},attack(target),
+    btn('↑',()=>{saveChain(move(chain(),index,-1));render()},true),
+    btn('↓',()=>{saveChain(move(chain(),index,1));render()},true),
+    btn('Remove',()=>{saveChain(removeHitAt(chain(),index));render()},true))));
+  entry.classList.add('tc-entry');list.append(entry);
  });
- const visibleIds=[current,...visible],pager=h('div',{class:'tc-pager'});
- pager.append(
-  btn('◀ Previous',()=>{if(state.chainPage>0){state.chainPage--;render()}},true),
-  muted('Upcoming page '+(state.chainPage+1)+' of '+pages),
-  btn('Next ▶',()=>{if(state.chainPage<pages-1){state.chainPage++;render()}},true));
- pager.querySelectorAll('button')[0].disabled=state.chainPage===0;
- pager.querySelectorAll('button')[1].disabled=state.chainPage===pages-1;
- if(rest.length>9)body.append(pager);
- body.append(row(btn('Refresh shown conditions',()=>enqueueStatuses(visibleIds,true),true),
+ body.append(list);
+ if(page.pages>1){
+  const pager=h('div',{class:'tc-pager'},
+   btn('← Prev',()=>{state.chainPage--;render();body.scrollTop=0},true),
+   muted('Upcoming '+(page.page+1)+' / '+page.pages),
+   btn('Next →',()=>{state.chainPage++;render();body.scrollTop=0},true));
+  pager.querySelectorAll('button')[0].disabled=page.page===0;
+  pager.querySelectorAll('button')[1].disabled=page.page===page.pages-1;
+  body.append(pager);
+ }
+ body.append(row(btn('Refresh conditions',()=>enqueueStatuses(visibleIds,true),true),
   btn('Clear chain',()=>{if(confirm('Clear your solo chain list?')){saveChain([]);state.chainPage=0;render()}},true)));
- body.append(muted('Hospital/Jail conditions are flagged unavailable; Traveling/Abroad depend on location. Statuses checked only on viewing this page or manual refresh.'));
  enqueueStatuses(visibleIds);
 }
 function renderWar(){
