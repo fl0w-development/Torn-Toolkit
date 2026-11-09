@@ -1,6 +1,6 @@
 # Torn Toolkit — Combat Edition
 
-**Version 0.5.3** · A small, manual combat companion userscript for [Torn](https://www.torn.com). No external website or VPS is needed for this release.
+**Version 0.5.4** · A small, manual combat companion userscript for [Torn](https://www.torn.com). No external website or VPS is needed for this release.
 
 ## Install
 1. Install a supported userscript manager (Tampermonkey, Violentmonkey, or Torn PDA if compatible).
@@ -49,3 +49,15 @@ This is a **focused rewrite**. General-purpose tools (travel profitability, gym 
 5. Pilot faction access before considering in-game Xanax subscriptions.
 
 No faction editing permissions or Premium access claims are enforced by this first version.
+
+## License
+
+**Torn Toolkit v0.5.4 and subsequent original releases** are offered under the [PolyForm Strict License 1.0.0](LICENSE) (source-available, **not open source**). Copyright © 2026 fl0w-development.
+
+- You may install and run an unmodified release for personal, noncommercial use, including normal gameplay.
+- You do **not** receive permission under this license to redistribute, resell, modify, publish derivatives of, or repackage current releases. Contact the copyright holder for separate written permission or commercial licensing.
+- Premium access, when offered, would be a separate subscription entitlement. This repository does **not** implement Premium billing or access control.
+- **Existing MIT grants remain valid** for releases and code previously made available under MIT (including v0.5.3 and earlier). This change does not revoke those permissions. Their original MIT license remains in the repository history; see the [previous license](https://github.com/fl0w-development/Torn-Toolkit/blob/5bf015d6e82e1656405f755f404959c3c20bbb57/LICENSE).
+- As a public GitHub repository, it can still be viewed and forked under GitHub's Terms of Service; the license does not grant broader redistribution rights for the newly licensed material.
+
+Questions about permission can be raised with the repository owner before redistribution or commercial use.
