@@ -789,7 +789,7 @@ function renderFactionChain(){
  if(editing)body.append(row(
   btn(factionState.busy?'Publishing…':'Publish faction order',()=>{void publishFactionDraft()}),
   btn('Discard edits',()=>{factionState.draft=null;state.factionPage=0;render()},true)));
- else body.append(muted('Faction chain is read-only for members. Attack links are manual.'));
+ else body.append(muted(session.editor?'This order is published to your faction. Choose Edit to update it.':'Faction chain is read-only for members. Attack links are manual.'));
  if(visibleIds.length){
   body.append(btn('Refresh target conditions',()=>enqueueStatuses(visibleIds,true),true));
   enqueueStatuses(visibleIds);
