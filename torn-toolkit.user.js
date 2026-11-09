@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Toolkit — Combat Edition
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      0.5.4
+// @version      0.5.5
 // @description  Manual target watchlists, solo chain lists and read-only faction rosters. No gameplay automation.
 // @author       fl0w-development
 // @copyright    Copyright (c) 2026 fl0w-development
@@ -17,7 +17,7 @@
 // ==/UserScript==
 (function(){
 'use strict';
-const VER='0.5.4',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
+const VER='0.5.5',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
 const isPda=!PDA.includes('#'),hasGM=typeof GM_getValue==='function'&&typeof GM_setValue==='function';
 const store={
  get(k,f){try{if(hasGM)return GM_getValue(k,f);const v=localStorage.getItem('tt_'+k);return v==null?f:JSON.parse(v)}catch(_){return f}},
