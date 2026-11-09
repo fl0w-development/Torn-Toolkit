@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Toolkit — Combat Edition
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      0.5.0
+// @version      0.5.1
 // @description  Manual target watchlists, solo chain lists and read-only faction rosters. No gameplay automation.
 // @author       fl0w-development
 // @license      MIT
@@ -16,7 +16,7 @@
 // ==/UserScript==
 (function(){
 'use strict';
-const VER='0.5.0',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
+const VER='0.5.1',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
 const isPda=!PDA.includes('#'),hasGM=typeof GM_getValue==='function'&&typeof GM_setValue==='function';
 const store={
  get(k,f){try{if(hasGM)return GM_getValue(k,f);const v=localStorage.getItem('tt_'+k);return v==null?f:JSON.parse(v)}catch(_){return f}},
@@ -99,6 +99,11 @@ const css=[
  '#tc-root .tc-tabs{display:flex;border-bottom:1px solid var(--border);padding:4px 8px;gap:5px}',
  '#tc-root .tc-tab{flex:1;border:0;border-bottom:2px solid transparent;padding:10px;color:var(--muted);background:transparent;cursor:pointer}',
  '#tc-root .tc-tab.selected{border-bottom-color:var(--accent);color:var(--ink);font-weight:800}',
+ '#tc-root .tc-toggle{width:38px;min-width:38px;padding:5px;font-size:20px;line-height:1;min-height:37px}',
+ '#tc-root .tc-toggle:focus-visible{outline:2px solid #e8ebf0;outline-offset:2px}',
+ '#tc-root.tc-collapsed .tc-tabs,#tc-root.tc-collapsed .tc-body,#tc-root.tc-collapsed .tc-foot,',
+ '#tc-root.tc-collapsed .tc-settings,#tc-root.tc-collapsed .tc-settings-btn{display:none!important}',
+ '#tc-root.tc-collapsed .tc-head{padding-top:7px;padding-bottom:7px}',
  '#tc-root .tc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0}',
  '#tc-root .tc-section{font-size:11px;letter-spacing:.05em;font-weight:800;color:var(--muted);margin:12px 0 6px}',
  '#tc-root .tc-roster{max-height:450px;overflow:auto}',
@@ -106,7 +111,7 @@ const css=[
  '@media(max-width:570px){#tc-root .tc-grid.rosters{grid-template-columns:1fr}#tc-root .tc-btn{min-height:42px}',
  '#tc-root .tc-input{min-height:44px;font-size:16px}}'
 ].join('');
-const state={tab:'attack',sub:'watch',target:null,player:null,playerError:'',own:'',enemy:'',left:null,right:null,warError:'',loading:false};
+const state={tab:'attack',sub:'watch',collapsed:store.get('combatCollapsed',false)===true,target:null,player:null,playerError:'',own:'',enemy:'',left:null,right:null,warError:'',loading:false};
 const apiCache=new Map(),inflight=new Map(),requests=[];
 async function api(path,params={},ttl=300){
  if(!key())throw Error('Add an API key in Settings');
@@ -124,7 +129,19 @@ async function api(path,params={},ttl=300){
  })();
  inflight.set(ident,pending);try{return await pending}finally{inflight.delete(ident)}
 }
-let root,body,tabs;
+let root,body,tabs,collapseBtn;
+function applyCollapsed(){
+ root.classList.toggle('tc-collapsed',state.collapsed);
+ collapseBtn.textContent=state.collapsed?'▾':'▴';
+ collapseBtn.title=state.collapsed?'Expand Torn Toolkit':'Collapse Torn Toolkit';
+ collapseBtn.setAttribute('aria-label',collapseBtn.title);
+ collapseBtn.setAttribute('aria-expanded',String(!state.collapsed));
+}
+function toggleCollapsed(){
+ state.collapsed=!state.collapsed;
+ store.set('combatCollapsed',state.collapsed);
+ applyCollapsed();
+}
 function targetFromUrl(){
  const u=new URL(location.href);
  const id=u.pathname==='/profiles.php'?u.searchParams.get('XID'):
@@ -288,12 +305,17 @@ async function loadTarget(id){
 function boot(){
  if(document.getElementById('tc-root'))return;
  document.head.append(h('style',{id:'tc-style'},css));
- tabs=h('div',{class:'tc-tabs',role:'tablist'});body=h('div',{class:'tc-body'});
+ tabs=h('div',{id:'tc-tabs',class:'tc-tabs',role:'tablist'});body=h('div',{id:'tc-body',class:'tc-body'});
+ collapseBtn=btn('▴',toggleCollapsed,true);
+ collapseBtn.classList.add('tc-toggle');
+ collapseBtn.setAttribute('aria-controls','tc-tabs tc-body');
  root=h('section',{id:'tc-root','aria-label':'Torn Toolkit Combat Edition'},
   h('div',{class:'tc-head'},title('TORN TOOLKIT'),muted('COMBAT '+VER),
-   h('span',{style:'flex:1'}),btn('API settings',showSettings,true)),
-  tabs,body,h('div',{class:'tc-muted',style:'padding:7px 12px;border-top:1px solid #3a4752'},'Manual actions only'));
- mount();renderTabs();state.target=targetFromUrl();render();loadTarget(state.target);
+   h('span',{style:'flex:1'}),
+   h('button',{type:'button',class:'tc-btn tc-soft tc-settings-btn',onclick:showSettings},'API settings'),
+   collapseBtn),
+  tabs,body,h('div',{class:'tc-muted tc-foot',style:'padding:7px 12px;border-top:1px solid #3a4752'},'Manual actions only'));
+ applyCollapsed();mount();renderTabs();state.target=targetFromUrl();render();loadTarget(state.target);
  let last=location.href;
  setInterval(()=>{
   if(location.href!==last){last=location.href;const current=targetFromUrl();
