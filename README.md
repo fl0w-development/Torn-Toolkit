@@ -1,6 +1,6 @@
 # Torn Toolkit — Combat Edition
 
-**Version 0.5.1** · A small, manual combat companion userscript for [Torn](https://www.torn.com). No external website or VPS is needed for this release.
+**Version 0.5.2** · A small, manual combat companion userscript for [Torn](https://www.torn.com). No external website or VPS is needed for this release.
 
 ## Install
 1. Install a supported userscript manager (Tampermonkey, Violentmonkey, or Torn PDA if compatible).
@@ -15,8 +15,8 @@
 
 ## Attack tab
 - **Current target:** On a player profile or attack page, show the player's public rank-based **battle-stat estimate**, with an explicit low-confidence label or missing-data warning.
-- **Watchlist:** Add players by Torn ID or use **+ Watch** from their profile; search, categorize, edit notes and remove targets.
-- **Solo Chain:** Arrange your own ordered manual hit list **outside a faction war**. Add targets from the watchlist or by ID, move entries up or down, remove entries, and keep repeated targets if you wish.
+- **Watchlist:** Add players by Torn ID or use **+ Watch** from their profile; search, categorize, edit notes and remove targets. See their public current condition (Okay, Hospital, Jail, Traveling/Abroad, etc.) on each visible page of up to 10 players. Choose **Refresh shown conditions** to check again.
+- **Solo Chain:** Arrange your own ordered manual hit list **outside a faction war**. The **Current Chain Target** shows public condition and a manual Attack link; **Skip current target** removes that planned hit only, leaving the saved watchlist intact. Upcoming hits can be removed individually, reordered, or checked via paginated condition snapshots. Duplicate hits are supported.
 - **Attack:** Opens Torn's normal attack page using a manual click. The toolkit never attacks, consumes items, selects fight actions, or plays for you.
 - Watchlist and solo chain are stored **only in the browser** under `combatWatchlist` and `combatSoloChain`. There is no account sync or cloud backup yet.
 
@@ -30,7 +30,8 @@
 
 ## Privacy and compliance
 - Your Torn API key is stored in your local userscript-manager/browser storage, never uploaded to a Torn Toolkit server.
-- Requests are made to `api.torn.com` only. No non-API Torn scraping, background enemy-status scanning, webhooks or third-party analytics are used.
+- Requests are made to `api.torn.com` only. No non-API Torn scraping, continuous enemy-status scanning, webhooks or third-party analytics are used. Public target conditions come from `user/{id}/basic` API v2, loaded for the visible page of a list (at most 10 distinct targets) and refreshed only when requested. Results are cached in memory for 90 seconds.
+- Conditions are a **snapshot**, not guaranteed attack eligibility: Hospital/Jail/Federal/Fallen are flagged unavailable; Traveling/Abroad are location-dependent; Okay indicates only likely availability. End times are sourced from Torn and can become stale.
 - All game interactions are manual. Each Attack button only navigates to Torn's native attack page.
 - Public stat estimates are broad rank-trigger brackets, **not spies, exact stats, or win predictions**.
 
