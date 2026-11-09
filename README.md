@@ -1,39 +1,46 @@
 # Torn Toolkit — Combat Edition
 
-**Version 0.5.4** · A small, manual combat companion userscript for [Torn](https://www.torn.com). No external website or VPS is needed for this release.
+**Version 0.5.5** · A small, manual combat companion userscript for [Torn](https://www.torn.com). No external website or VPS is needed for this release.
 
 ## Install
 1. Install a supported userscript manager (Tampermonkey, Violentmonkey, or Torn PDA if compatible).
 2. [Install the latest userscript](https://raw.githubusercontent.com/fl0w-development/Torn-Toolkit/main/torn-toolkit.user.js).
-3. Add your Torn API key under **API settings**. Existing keys from prior Torn Toolkit versions remain locally stored.
+3. Add your Torn API key under **Settings**. Existing keys from prior Torn Toolkit versions remain locally stored.
 4. Disable duplicate copies of earlier Torn Toolkit scripts in your userscript manager.
 
-## Compact menu
-- Click the **up arrow (▴)** in the toolkit header to collapse the Attack/War menu to a slim title bar.
-- Click the **down arrow (▾)** to expand it again. The API Settings button is available while expanded.
-- Your collapsed/expanded choice is saved on this device and kept across Torn page changes and reloads.
+## Compact workspace
+
+Torn Toolkit now stays inside a **640px-wide, bounded panel**, rather than becoming a very long full-width section that pushes Torn's content down the page. On desktop the content area is capped at **405px** (or 55% of the viewport height, whichever is smaller); mobile uses a smaller cap. When a list grows, scroll **inside the toolkit** instead of scrolling through thousands of pixels of Torn's page.
+
+- One row of tabs: **Targets**, **Chain**, and **War**. Settings opens *inside the same bounded panel* from the header.
+- The **up arrow (▴)** collapses the toolkit to a slim title bar; **down arrow (▾)** expands it. New installs start collapsed to keep Torn uncluttered, while previously saved open/closed preferences are preserved.
+- Small target/queued counts are visible in the header on desktop.
+- Watchlist entries and faction members are shown in **five-item pages**, with search. The Chain tab keeps the current hit prominently visible and displays up to **four upcoming hits per page**.
+- Lists never lose entries merely because they are on another page. A previously saved watchlist or chain is not cleared by this UI update.
 
 ## Appearance
-Combat Edition uses a compact, Torn-style charcoal interface: flat player rows, restrained red accents, smaller controls, and simple condition dots. The active chain target is still clearly highlighted, and the existing collapse arrow and mobile layout are retained.
 
-## Attack tab
-- **Current target:** On a player profile or attack page, show the player's public rank-based **battle-stat estimate**, with an explicit low-confidence label or missing-data warning.
-- **Watchlist:** Add players by Torn ID or use **+ Watch** from their profile; search, categorize, edit notes and remove targets. See their public current condition (Okay, Hospital, Jail, Traveling/Abroad, etc.) on each visible page of up to 10 players. Choose **Refresh shown conditions** to check again.
-- **Solo Chain:** Arrange your own ordered manual hit list **outside a faction war**. The **Current Chain Target** shows public condition and a manual Attack link; **Skip current target** removes that planned hit only, leaving the saved watchlist intact. Upcoming hits can be removed individually, reordered, or checked via paginated condition snapshots. Duplicate hits are supported.
-- **Attack:** Opens Torn's normal attack page using a manual click. The toolkit never attacks, consumes items, selects fight actions, or plays for you.
-- Watchlist and solo chain are stored **only in the browser** under `combatWatchlist` and `combatSoloChain`. There is no account sync or cloud backup yet.
+A compact charcoal and neutral-slate utility style with refined borders, clearer typography, quiet status dots, and a restrained red Attack button. It is responsive on mobile and keeps Torn's original pages accessible.
+
+## Targets and Chain tabs
+
+- **Current profile target:** On player profile/attack pages, the Targets tab shows the public rank-based battle-stat estimate with its low-confidence or missing-data warning.
+- **Targets/watchlist:** Add players by Torn ID or use **+ Watch** on a profile. Search, categorize, edit notes and remove targets. View public conditions (Okay, Hospital, Jail, Traveling/Abroad), in pages of up to five. **Refresh conditions** requests a new snapshot.
+- **Chain:** Arrange a solo manual hit order. The **Current target** shows public condition and a manual Attack link; **Skip target** removes exactly that one queued hit, without deleting a saved watchlist entry. Upcoming hits can be moved, removed, or searched through via pagination. Duplicate entries remain supported.
+- **Attack:** Only opens Torn's native attack page when clicked. The toolkit never automatically attacks, consumes items, or plays for the user.
+- Watchlists and solo chain entries remain in the browser under `combatWatchlist` and `combatSoloChain`; no account sync or cloud backup is included.
 
 ## War tab
 - Enter the IDs of **your faction** and the **enemy faction**.
-- Press **Load rosters** to fetch both rosters from the official Torn API v2.
-- Browse member names, levels, public statuses, and manual Attack links.
+- Press **Load factions** to fetch both rosters from the official Torn API v2.
+- Switch between your faction and the enemy in the War tab, search members by name or ID, and view five per page. Names, levels, public statuses, and manual Attack links remain available.
 - Roster information does **not** reveal battle stats. Visit a player's profile for a conservative estimate where public information permits.
 
 **Not yet included:** shared faction war plans, chain orders synchronized between members, faction-specific authentication, leadership-only editing, Xanax subscription activation, war score dashboards, or automated roster/target monitoring. These require additional API review and an authenticated backend. The current War tab is intentionally read-only.
 
 ## Privacy and compliance
 - Your Torn API key is stored in your local userscript-manager/browser storage, never uploaded to a Torn Toolkit server.
-- Requests are made to `api.torn.com` only. No non-API Torn scraping, continuous enemy-status scanning, webhooks or third-party analytics are used. Public target conditions come from `user/{id}/basic` API v2, loaded for the visible page of a list (at most 10 distinct targets) and refreshed only when requested. Results are cached in memory for 90 seconds.
+- Requests are made to `api.torn.com` only. No non-API Torn scraping, continuous enemy-status scanning, webhooks or third-party analytics are used. Public target conditions come from `user/{id}/basic` API v2, loaded for the visible page of a list (at most 5 distinct targets) and refreshed only when requested. Results are cached in memory for 90 seconds.
 - Conditions are a **snapshot**, not guaranteed attack eligibility: Hospital/Jail/Federal/Fallen are flagged unavailable; Traveling/Abroad are location-dependent; Okay indicates only likely availability. End times are sourced from Torn and can become stale.
 - All game interactions are manual. Each Attack button only navigates to Torn's native attack page.
 - Public stat estimates are broad rank-trigger brackets, **not spies, exact stats, or win predictions**.
