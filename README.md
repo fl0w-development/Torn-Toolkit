@@ -1,6 +1,6 @@
 # Torn Toolkit — Combat Edition
 
-**Version 0.5.2** · A small, manual combat companion userscript for [Torn](https://www.torn.com). No external website or VPS is needed for this release.
+**Version 0.5.3** · A small, manual combat companion userscript for [Torn](https://www.torn.com). No external website or VPS is needed for this release.
 
 ## Install
 1. Install a supported userscript manager (Tampermonkey, Violentmonkey, or Torn PDA if compatible).
@@ -12,6 +12,9 @@
 - Click the **up arrow (▴)** in the toolkit header to collapse the Attack/War menu to a slim title bar.
 - Click the **down arrow (▾)** to expand it again. The API Settings button is available while expanded.
 - Your collapsed/expanded choice is saved on this device and kept across Torn page changes and reloads.
+
+## Appearance
+Combat Edition uses a compact, Torn-style charcoal interface: flat player rows, restrained red accents, smaller controls, and simple condition dots. The active chain target is still clearly highlighted, and the existing collapse arrow and mobile layout are retained.
 
 ## Attack tab
 - **Current target:** On a player profile or attack page, show the player's public rank-based **battle-stat estimate**, with an explicit low-confidence label or missing-data warning.
