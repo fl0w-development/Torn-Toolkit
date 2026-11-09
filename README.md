@@ -8,6 +8,13 @@
 3. Add your Torn API key under **Settings**. Existing keys from prior Torn Toolkit versions remain locally stored.
 4. Disable duplicate copies of earlier Torn Toolkit scripts in your userscript manager.
 
+### On a phone or tablet
+- **Torn PDA** (Android and iPhone): add the script under Settings → Userscripts. PDA fills in your API key automatically.
+- **Android:** Firefox with the Tampermonkey or Violentmonkey add-on.
+- **iPhone and iPad:** Safari with a userscript extension such as Tampermonkey or Userscripts.
+
+On touch screens, buttons and text boxes get larger, and text boxes are sized so iPhones don't zoom in when you tap them. Confirmations use **tap again to confirm** instead of browser pop-ups, which some in-app browsers don't show. If copying a share code is blocked, the code is selected so you can long-press and copy it.
+
 ## Compact workspace
 
 Torn Toolkit now stays inside a **660px-wide, bounded panel**, rather than becoming a very long full-width section that pushes Torn's content down the page. On desktop the content area is capped at **406px** (or 55% of the viewport height, whichever is smaller); mobile uses a smaller cap. When a list grows, scroll **inside the toolkit** instead of scrolling through thousands of pixels of Torn's page.

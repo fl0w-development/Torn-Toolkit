@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Toolkit — Combat Edition
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      0.6.2
+// @version      0.6.3
 // @description  Manual target watchlists, solo chain lists and read-only faction rosters. No gameplay automation.
 // @author       fl0w-development
 // @copyright    Copyright (c) 2026 fl0w-development
@@ -17,7 +17,7 @@
 // ==/UserScript==
 (function(){
 'use strict';
-const VER='0.6.2',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
+const VER='0.6.3',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
 const isPda=!PDA.includes('#'),hasGM=typeof GM_getValue==='function'&&typeof GM_setValue==='function';
 const store={
  get(k,f){try{if(hasGM)return GM_getValue(k,f);const v=localStorage.getItem('tt_'+k);return v==null?f:JSON.parse(v)}catch(_){return f}},
@@ -111,6 +111,16 @@ function h(tag,attrs={},...kids){
  return n;
 }
 const btn=(t,cb,secondary=false)=>h('button',{type:'button',class:'tc-btn'+(secondary?' tc-soft':''),onclick:cb},t);
+// Tap-twice confirmation instead of window.confirm(): in-app browsers (e.g. Torn PDA) may never show native dialogs.
+function confirmBtn(t,cb,secondary=false,needed=()=>true){
+ let armed=false,timer=0;
+ const b=btn(t,()=>{
+  if(!needed()||armed){clearTimeout(timer);cb();return}
+  armed=true;b.textContent='Tap again to confirm';b.classList.add('tc-confirm');
+  timer=setTimeout(()=>{armed=false;b.textContent=t;b.classList.remove('tc-confirm')},4000);
+ },secondary);
+ return b;
+}
 const attack=id=>h('a',{class:'tc-btn tc-primary',href:url(id),title:'Open attack page; you initiate the attack'},'Attack');
 const muted=t=>h('div',{class:'tc-muted'},t);
 const card=(...kids)=>h('div',{class:'tc-card'},...kids);
@@ -290,6 +300,13 @@ const css=[
  " #tc-root .tc-tabs{padding:5px;gap:2px}",
  " #tc-root .tc-tab{padding:7px 3px;min-height:42px;font-size:10px}",
  "}",
+ "@media(pointer:coarse){",
+ " #tc-root .tc-tab{min-height:42px}",
+ " #tc-root .tc-btn{min-height:40px}",
+ " #tc-root .tc-input{min-height:42px;font-size:16px}",
+ " #tc-root .tc-toggle{min-width:38px;width:38px}",
+ "}",
+ "#tc-root .tc-btn.tc-confirm{border-color:rgba(255,183,107,.6);color:#ffd2a1}",
  "@media(prefers-reduced-motion:reduce){",
  " #tc-root::before,#tc-root::after{animation:none;will-change:auto;opacity:.32}",
  " #tc-root .tc-btn,#tc-root .tc-tab,#tc-root .tc-switch input,",
@@ -655,7 +672,7 @@ function renderChain(){
   body.append(pager);
  }
  body.append(row(btn('Refresh conditions',()=>enqueueStatuses(visibleIds,true),true),
-  btn('Clear chain',()=>{if(confirm('Clear your solo chain list?')){saveChain([]);state.chainPage=0;render()}},true)));
+  confirmBtn('Clear chain',()=>{saveChain([]);state.chainPage=0;render()},true)));
  enqueueStatuses(visibleIds);
 }
 function renderFactionChain(){
@@ -699,11 +716,10 @@ function renderFactionChain(){
     if(factionState.draft.length>=150){err.textContent='Maximum 150 targets';return}
     factionState.draft.push(norm(target.value));state.factionPage=Math.floor((factionState.draft.length-1)/5);render();
    })),err);
-   body.append(row(btn('Use Solo Chain',()=>{
-    if(factionState.draft.length&&!confirm('Replace draft with your Solo Chain?'))return;
+   body.append(row(confirmBtn('Use Solo Chain',()=>{
     factionState.draft=chain().slice();state.factionPage=0;render();
-   },true),btn('Clear draft',()=>{
-    if(confirm('Clear the draft?')){factionState.draft=[];state.factionPage=0;render()}
+   },true,()=>factionState.draft.length>0),confirmBtn('Clear draft',()=>{
+    factionState.draft=[];state.factionPage=0;render();
    },true)));
    body.append(row(btn('Generate share code',generateFactionShare),
     btn('Discard draft',()=>{factionState.draft=null;state.factionPage=0;render()},true)));
@@ -711,12 +727,19 @@ function renderFactionChain(){
  }
  if(factionState.shareCode){
   const share=h('textarea',{class:'tc-input',rows:3,readonly:true},factionState.shareCode);
+  const copied=muted('');
   body.append(h('div',{class:'tc-card'},title('Share with faction chat'),
    muted('Copy this code and send it to members. When the order changes, send a fresh code.'),
    share,btn('Copy share code',async()=>{
-    try{await navigator.clipboard.writeText(factionState.shareCode)}
-    catch(_){share.focus();share.select()}
-   })));
+    let ok=false;
+    try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(factionState.shareCode);ok=true}}catch(_){}
+    if(!ok){
+     // Older and in-app browsers: select the text (setSelectionRange works on iOS) and use the legacy copy command.
+     share.focus();share.select();share.setSelectionRange(0,share.value.length);
+     try{ok=document.execCommand('copy')}catch(_){ok=false}
+    }
+    copied.textContent=ok?'Copied.':'Copy is blocked here. The code is selected: long-press it and choose Copy.';
+   }),copied));
  }
  const items=editing?factionState.draft:plan&&plan.entries||[];
  const page=pageSlice(items,state.factionPage,5);state.factionPage=page.page;
