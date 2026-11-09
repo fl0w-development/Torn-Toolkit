@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Toolkit — Combat Edition
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      0.6.1
+// @version      0.6.2
 // @description  Manual target watchlists, solo chain lists and read-only faction rosters. No gameplay automation.
 // @author       fl0w-development
 // @copyright    Copyright (c) 2026 fl0w-development
@@ -17,7 +17,7 @@
 // ==/UserScript==
 (function(){
 'use strict';
-const VER='0.6.1',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
+const VER='0.6.2',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
 const isPda=!PDA.includes('#'),hasGM=typeof GM_getValue==='function'&&typeof GM_setValue==='function';
 const store={
  get(k,f){try{if(hasGM)return GM_getValue(k,f);const v=localStorage.getItem('tt_'+k);return v==null?f:JSON.parse(v)}catch(_){return f}},
@@ -83,7 +83,20 @@ function pageSlice(items,index,size){
  const page=Math.max(0,Math.min(Number.isInteger(index)?index:0,pages-1)),start=page*limit;
  return {page,pages,start,items:items.slice(start,start+limit)};
 }
-const pure={good,norm,url,number,estimate,members,move,removeHitAt,availability,parseStatus,pageSlice};
+function encodeFactionOrder(fid,author,createdAt,ids){
+ if(!good(fid)||!good(author)||!Number.isInteger(createdAt)||createdAt<1600000000||
+    !Array.isArray(ids)||ids.length>150||!ids.every(good))throw Error('Invalid faction chain details');
+ return 'TTFC1|'+norm(fid)+'|'+norm(author)+'|'+createdAt+'|'+ids.map(norm).join(',');
+}
+function decodeFactionOrder(raw){
+ const code=String(raw||'').trim(),parts=code.split('|');
+ if(code.length>1900||parts.length!==5||parts[0]!=='TTFC1'||!good(parts[1])||!good(parts[2])||
+    !/^\d{10}$/.test(parts[3]))throw Error('Invalid leader order code.');
+ const ids=parts[4]?parts[4].split(','):[];
+ if(ids.length>150||!ids.every(good))throw Error('Chain code contains invalid player IDs.');
+ return {factionId:norm(parts[1]),authorId:norm(parts[2]),createdAt:Number(parts[3]),entries:ids.map(norm)};
+}
+const pure={good,norm,url,number,estimate,members,move,removeHitAt,availability,parseStatus,pageSlice,encodeFactionOrder,decodeFactionOrder};
 if(typeof module!=='undefined'&&module.exports){module.exports=pure;return}
 function h(tag,attrs={},...kids){
  const n=document.createElement(tag);
@@ -382,100 +395,60 @@ async function processStatusQueue(){
   }
  }finally{statusBusy=false}
 }
-// Optional shared faction chain: local private solo chain stays independent.
-const factionState={plan:null,draft:null,draftRevision:0,loading:false,busy:false,error:'',lastFetch:0};
-function validateServiceUrl(value){
+// Serverless sharing: the Torn API verifies identity and membership, but does NOT
+// store toolkit plans. Leaders share a code manually; members import a local copy.
+const factionState={identity:null,loading:false,error:'',draft:null,shareCode:''};
+function savedFactionPlan(){
+ if(!factionState.identity)return null;
+ const stored=store.get('combatFactionOrder_'+factionState.identity.factionId,null);
+ if(!stored||stored.factionId!==factionState.identity.factionId||
+    !Array.isArray(stored.entries)||stored.entries.length>150||
+    !stored.entries.every(good))return null;
+ return stored;
+}
+async function verifyFaction(){
+ if(factionState.loading||!key())return;
+ factionState.loading=true;factionState.error='';if(state.view==='faction')render();
  try{
-  const parsed=new URL(String(value||'').trim());
-  if(parsed.protocol!=='https:'||parsed.username||parsed.password||parsed.search||parsed.hash||
-     (parsed.pathname!=='/'&&parsed.pathname!==''))return null;
-  return parsed.origin;
- }catch(_){return null}
+  const info=await api('key/info',{},300);
+  const owner=info&&info.info&&info.info.user||{};
+  if(!good(owner.id)||!good(owner.faction_id))throw Error('Torn did not return your faction membership.');
+  const factionId=norm(owner.faction_id),memberId=norm(owner.id);
+  const [basicResult,memberResult]=await Promise.all([
+   api('faction/'+factionId+'/basic',{},300),
+   api('faction/'+factionId+'/members',{},300)
+  ]);
+  const basic=basicResult&&basicResult.basic||{},membersList=members(memberResult);
+  if(norm(basic.id)!==factionId||!membersList.some(x=>x.id===memberId))
+   throw Error('Torn did not confirm your faction membership.');
+  factionState.identity={
+   factionId,memberId,leaderId:good(basic.leader_id)?norm(basic.leader_id):null,
+   coLeaderId:good(basic.co_leader_id)?norm(basic.co_leader_id):null,
+   editor:memberId===norm(basic.leader_id)||good(basic.co_leader_id)&&memberId===norm(basic.co_leader_id)
+  };
+ }catch(e){factionState.error=String(e.message||e).slice(0,180);factionState.identity=null}
+ finally{factionState.loading=false;if(state.view==='faction')render()}
 }
-function factionBase(){return validateServiceUrl(store.get('factionServiceUrl',''))}
-function connectedFaction(){
- const info=store.get('factionSession',null),base=factionBase();
- return info&&base&&info.server===base&&typeof info.token==='string'&&info.token.length>20&&
-  Number(info.expires_at)>Date.now()/1000+5?info:null;
-}
-function disconnectFaction(){
- store.del('factionSession');factionState.plan=null;factionState.draft=null;
- factionState.lastFetch=0;factionState.error='';if(state.view==='faction')render();
-}
-async function factionRequest(route,method='GET',data=null,token=null){
- const base=factionBase();
- if(!base)throw Error('Configure the faction service HTTPS address in Settings.');
- const headers={'Accept':'application/json'};
- if(data!==null)headers['Content-Type']='application/json';
- if(token)headers.Authorization='Bearer '+token;
- let response;
+function importFactionCode(input,notice){
+ const id=factionState.identity;
+ if(!id){notice.textContent='Verify your faction membership first.';return}
  try{
-  response=await fetch(base+route,{method,headers,mode:'cors',credentials:'omit',
-   cache:'no-store',body:data===null?undefined:JSON.stringify(data)});
- }catch(_){throw Error('Faction service unreachable. Verify the HTTPS address and CORS settings.')}
- let result;
- try{result=await response.json()}catch(_){throw Error('Faction service returned an invalid response.')}
- if(!response.ok){
-  const error=new Error(String(result.error||'Faction service error').slice(0,170));
-  error.status=response.status;throw error;
- }
- return result;
+  const order=decodeFactionOrder(input);
+  if(order.factionId!==id.factionId)throw Error('This order belongs to a different faction.');
+  if(order.authorId!==id.leaderId&&order.authorId!==id.coLeaderId)
+   throw Error('The claimed author is not your current faction leader or co-leader.');
+  // The author ID can be forged. Only trust code received directly from leadership.
+  store.set('combatFactionOrder_'+id.factionId,order);
+  state.factionPage=0;factionState.error='';render();
+ }catch(e){notice.textContent=String(e.message||e)}
 }
-async function connectFaction(){
- if(factionState.busy)return;
- if(!key()){factionState.error='Add your Torn API key in Settings first.';render();return}
- factionState.busy=true;factionState.error='';render();
- try{
-  // Explicit opt-in: sends existing Torn API key once over HTTPS for Torn-backed verification.
-  const result=await factionRequest('/v1/session','POST',{key:key()});
-  if(typeof result.token!=='string'||!good(result.user_id)||!good(result.faction_id)||
-     !Number.isFinite(Number(result.expires_at)))throw Error('Faction login response was invalid.');
-  store.set('factionSession',{server:factionBase(),token:result.token,
-   user_id:result.user_id,faction_id:result.faction_id,editor:result.editor===true,
-   expires_at:result.expires_at});
-  factionState.plan=null;
- }catch(e){factionState.error=String(e.message||e)}
- finally{factionState.busy=false;render()}
- if(connectedFaction())void refreshFactionPlan();
+function generateFactionShare(){
+ const id=factionState.identity,draft=factionState.draft;
+ if(!id||!id.editor||!Array.isArray(draft))return;
+ factionState.shareCode=encodeFactionOrder(id.factionId,id.memberId,Math.floor(Date.now()/1000),draft);
+ store.set('combatFactionOrder_'+id.factionId,decodeFactionOrder(factionState.shareCode));
+ factionState.draft=null;state.factionPage=0;render();
 }
-async function refreshFactionPlan(){
- const session=connectedFaction();
- if(!session||factionState.loading)return;
- factionState.loading=true;factionState.error='';render();
- try{
-  const result=await factionRequest('/v1/plan','GET',null,session.token);
-  if(result.faction_id!==session.faction_id)throw Error('Faction identity mismatch. Reconnect.');
-  if(!Array.isArray(result.entries)||!Number.isInteger(result.revision))throw Error('Invalid faction plan data.');
-  factionState.plan={...result,entries:result.entries.filter(x=>x&&good(x.id)).map(x=>({id:norm(x.id)}))};
-  factionState.lastFetch=Date.now();
- }catch(e){
-  factionState.error=String(e.message||e);
-  if(e.status===401){store.del('factionSession');factionState.plan=null;factionState.draft=null}
- }finally{factionState.loading=false;if(state.view==='faction')render()}
-}
-function startFactionDraft(){
- const session=connectedFaction(),plan=factionState.plan;
- if(!session||!session.editor||!plan)return;
- factionState.draft=plan.entries.map(x=>({...x}));
- factionState.draftRevision=plan.revision;state.factionPage=0;render();
-}
-async function publishFactionDraft(){
- const session=connectedFaction();
- if(!session||!session.editor||!factionState.draft||factionState.busy)return;
- factionState.busy=true;factionState.error='';render();
- try{
-  const result=await factionRequest('/v1/plan','PUT',{
-   revision:factionState.draftRevision,entries:factionState.draft
-  },session.token);
-  if(!Array.isArray(result.entries)||!Number.isInteger(result.revision))throw Error('Invalid publish response.');
-  factionState.plan=result;factionState.draft=null;factionState.lastFetch=Date.now();
-  state.factionPage=0;
- }catch(e){
-  factionState.error=String(e.message||e);
-  if(e.status===401){store.del('factionSession');factionState.plan=null;factionState.draft=null}
- }finally{factionState.busy=false;if(state.view==='faction')render()}
-}
-
 let root,body,tabs,collapseBtn,headCounts;
 function applyCollapsed(){
  root.classList.toggle('tc-collapsed',state.collapsed);
@@ -562,7 +535,7 @@ function renderSettings(){
 function switchView(view){
  if(!['watch','chain','faction','war'].includes(view))return;
  state.view=view;state.lastView=view;renderTabs();render();body.scrollTop=0;
- if(view==='faction'&&connectedFaction()&&!factionState.plan)void refreshFactionPlan();
+ if(view==='faction'&&!factionState.identity&&!factionState.loading)void verifyFaction();
 }
 function renderTabs(){
  tabs.replaceChildren(...[['watch','Targets'],['chain','Solo Chain'],['faction','Faction Chain'],['war','War']].map(([id,label])=>
@@ -895,11 +868,6 @@ function boot(){
   if(!root.isConnected||root.parentElement!==host())mount();
  },1500);
  setInterval(()=>{if(!document.hidden&&!state.collapsed)updateStatusNodes()},15000);
- setInterval(()=>{
-  if(state.view==='faction'&&!state.collapsed&&!document.hidden&&
-   connectedFaction()&&!factionState.draft&&!factionState.loading&&!factionState.busy&&
-   Date.now()-factionState.lastFetch>60000)void refreshFactionPlan();
- },60000);
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});
 else boot();
