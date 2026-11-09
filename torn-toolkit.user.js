@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Toolkit — Combat Edition
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      0.5.2
+// @version      0.5.3
 // @description  Manual target watchlists, solo chain lists and read-only faction rosters. No gameplay automation.
 // @author       fl0w-development
 // @license      MIT
@@ -16,7 +16,7 @@
 // ==/UserScript==
 (function(){
 'use strict';
-const VER='0.5.2',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
+const VER='0.5.3',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
 const isPda=!PDA.includes('#'),hasGM=typeof GM_getValue==='function'&&typeof GM_setValue==='function';
 const store={
  get(k,f){try{if(hasGM)return GM_getValue(k,f);const v=localStorage.getItem('tt_'+k);return v==null?f:JSON.parse(v)}catch(_){return f}},
@@ -92,47 +92,102 @@ function h(tag,attrs={},...kids){
  return n;
 }
 const btn=(t,cb,secondary=false)=>h('button',{type:'button',class:'tc-btn'+(secondary?' tc-soft':''),onclick:cb},t);
-const attack=id=>h('a',{class:'tc-btn',href:url(id),title:'Open attack page; you initiate the attack'},'Attack');
+const attack=id=>h('a',{class:'tc-btn tc-primary',href:url(id),title:'Open attack page; you initiate the attack'},'Attack');
 const muted=t=>h('div',{class:'tc-muted'},t);
 const card=(...kids)=>h('div',{class:'tc-card'},...kids);
 const row=(...kids)=>h('div',{class:'tc-row'},...kids);
 const main=(...kids)=>h('div',{class:'tc-grow'},...kids);
 const title=t=>h('div',{class:'tc-title'},t);
 const css=[
- '#tc-root{--ink:#e8ebf0;--muted:#a4afba;--border:#3a4752;--bg:#141b22;--pane:#202a33;--accent:#bc5047;',
- 'font:13px/1.45 system-ui,Arial,sans-serif;color:var(--ink);background:var(--bg);border:1px solid var(--border);',
- 'border-radius:10px;width:100%;margin:0 0 12px;overflow:hidden;box-sizing:border-box}',
- '#tc-root *{box-sizing:border-box}#tc-root .tc-head{padding:11px 13px;display:flex;align-items:center;gap:9px;background:#202a33}',
- '#tc-root .tc-title{font-weight:800}#tc-root .tc-muted{font-size:11px;color:var(--muted);margin:5px 0}',
- '#tc-root .tc-body{padding:12px}#tc-root .tc-row{display:flex;align-items:center;flex-wrap:wrap;gap:7px}',
- '#tc-root .tc-grow{flex:1;min-width:120px;overflow-wrap:anywhere}',
- '#tc-root .tc-card{border:1px solid var(--border);border-radius:8px;padding:11px;background:var(--pane);margin:8px 0}',
- '#tc-root .tc-btn{display:inline-flex;justify-content:center;align-items:center;background:var(--accent);',
- 'color:#fff;border:1px solid #d06259;border-radius:6px;padding:8px 12px;min-height:37px;cursor:pointer;',
- 'font:700 12px system-ui,Arial,sans-serif;text-decoration:none}',
- '#tc-root .tc-soft{background:#34414d;border-color:#53616e;color:var(--ink)}',
- '#tc-root .tc-input{background:#141c24;color:var(--ink);border:1px solid #51606c;border-radius:6px;',
- 'padding:9px;font:inherit;width:100%;min-width:0;min-height:40px}',
- '#tc-root .tc-tabs{display:flex;border-bottom:1px solid var(--border);padding:4px 8px;gap:5px}',
- '#tc-root .tc-tab{flex:1;border:0;border-bottom:2px solid transparent;padding:10px;color:var(--muted);background:transparent;cursor:pointer}',
- '#tc-root .tc-tab.selected{border-bottom-color:var(--accent);color:var(--ink);font-weight:800}',
- '#tc-root .tc-toggle{width:38px;min-width:38px;padding:5px;font-size:20px;line-height:1;min-height:37px}',
- '#tc-root .tc-toggle:focus-visible{outline:2px solid #e8ebf0;outline-offset:2px}',
- '#tc-root.tc-collapsed .tc-tabs,#tc-root.tc-collapsed .tc-body,#tc-root.tc-collapsed .tc-foot,',
- '#tc-root.tc-collapsed .tc-settings,#tc-root.tc-collapsed .tc-settings-btn{display:none!important}',
- '#tc-root.tc-collapsed .tc-head{padding-top:7px;padding-bottom:7px}',
- '#tc-root .tc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0}',
- '#tc-root .tc-section{font-size:11px;letter-spacing:.05em;font-weight:800;color:var(--muted);margin:12px 0 6px}',
- '#tc-root .tc-status{font-size:11px;line-height:1.4;padding:6px 8px;margin:5px 0;border-radius:5px;',
- 'border-left:3px solid #758496;background:#293640;overflow-wrap:anywhere}',
- '#tc-root .tc-status-unavailable{border-left-color:#e47269;color:#ffb9b1}',
- '#tc-root .tc-status-location{border-left-color:#d7b25b;color:#fbe0a3}',
- '#tc-root .tc-status-likely{border-left-color:#68b589;color:#b9eccc}',
- '#tc-root .tc-pager{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:9px 0}',
- '#tc-root .tc-roster{max-height:450px;overflow:auto}',
- '#tc-root [hidden]{display:none!important}',
- '@media(max-width:570px){#tc-root .tc-grid.rosters{grid-template-columns:1fr}#tc-root .tc-btn{min-height:42px}',
- '#tc-root .tc-input{min-height:44px;font-size:16px}}'
+ "#tc-root{",
+ "  --tc-ink:#e4e4e4;--tc-muted:#a6a6a6;--tc-line:#414141;--tc-accent:#b94038;",
+ "  color-scheme:dark;font:12px/1.45 Arial,Helvetica,sans-serif;color:var(--tc-ink);",
+ "  background:#1e1e1e;border:1px solid var(--tc-line);border-top:2px solid var(--tc-accent);",
+ "  border-radius:3px;width:100%;max-width:100%;margin:0 0 8px;overflow:hidden;box-sizing:border-box",
+ "}",
+ "#tc-root *{box-sizing:border-box}",
+ "#tc-root .tc-head{",
+ "  display:flex;align-items:center;gap:8px;min-height:40px;padding:5px 9px;",
+ "  background:#292929;border-bottom:1px solid var(--tc-line)",
+ "}",
+ "#tc-root .tc-head .tc-title{font-size:14px;letter-spacing:0;font-weight:700;white-space:nowrap}",
+ "#tc-root .tc-head .tc-muted{font-size:10px;margin:0;color:#929292;white-space:nowrap}",
+ "#tc-root .tc-body{padding:8px 10px 11px}",
+ "#tc-root .tc-title{font-weight:700;font-size:12px;letter-spacing:0;line-height:1.45}",
+ "#tc-root .tc-muted{font-size:11px;color:var(--tc-muted);margin:3px 0;line-height:1.45}",
+ "#tc-root .tc-row{display:flex;align-items:center;flex-wrap:wrap;gap:6px}",
+ "#tc-root .tc-grow{flex:1 1 170px;min-width:0;overflow-wrap:anywhere}",
+ "#tc-root .tc-card{border:0;border-bottom:1px solid #3b3b3b;border-radius:0;padding:9px 3px;margin:0;background:transparent}",
+ "#tc-root .tc-card:last-child{border-bottom-color:transparent}",
+ "#tc-root .tc-card.tc-current{background:#292929;border:1px solid #484848;border-left:3px solid var(--tc-accent);padding:9px;margin:6px 0 9px}",
+ "#tc-root .tc-current .tc-section{background:transparent;border:0;padding:0;margin:0 0 6px;color:#d6d6d6}",
+ "#tc-root .tc-settings{background:#292929;padding:11px;border-bottom:1px solid #505050}",
+ "#tc-root .tc-settings .tc-title{margin-bottom:6px}",
+ "#tc-root .tc-btn{",
+ "  display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;",
+ "  padding:5px 9px;min-height:30px;border:1px solid #555;border-radius:2px;",
+ "  background:#383838;color:#e2e2e2;font:600 11px Arial,Helvetica,sans-serif;",
+ "  text-decoration:none;white-space:nowrap;cursor:pointer;line-height:1.3",
+ "}",
+ "#tc-root .tc-btn:hover{background:#494949;border-color:#696969;color:#fff}",
+ "#tc-root .tc-btn.tc-primary{background:#a43933;border-color:#bf514a;color:#fff}",
+ "#tc-root .tc-btn.tc-primary:hover{background:#ba4840;border-color:#d76a63}",
+ "#tc-root .tc-btn.tc-soft{background:#2c2c2c;color:#c7c7c7;border-color:#474747}",
+ "#tc-root .tc-btn.tc-soft:hover{background:#3a3a3a;color:#fff}",
+ "#tc-root .tc-btn:disabled{opacity:.4;cursor:not-allowed}",
+ "#tc-root .tc-btn:focus-visible,#tc-root .tc-tab:focus-visible{",
+ "  outline:2px solid #e5a19c;outline-offset:2px",
+ "}",
+ "#tc-root .tc-input{",
+ "  color-scheme:dark;background:#181818;color:var(--tc-ink);border:1px solid #525252;",
+ "  border-radius:2px;padding:6px 8px;font:12px Arial,Helvetica,sans-serif;",
+ "  width:100%;min-width:0;min-height:34px",
+ "}",
+ "#tc-root .tc-input:focus{outline:1px solid #bb514a;border-color:#bb514a}",
+ "#tc-root textarea.tc-input{min-height:65px;resize:vertical}",
+ "#tc-root .tc-tabs{",
+ "  display:flex;align-items:stretch;gap:0;padding:0 7px;background:#242424;",
+ "  border-bottom:1px solid var(--tc-line)",
+ "}",
+ "#tc-root .tc-tab{",
+ "  flex:0 1 126px;min-width:0;min-height:35px;padding:8px 11px;border:0;",
+ "  border-bottom:2px solid transparent;background:transparent;color:#a4a4a4;",
+ "  font:600 12px Arial,Helvetica,sans-serif;cursor:pointer",
+ "}",
+ "#tc-root .tc-tab:hover{background:#303030;color:#f0f0f0}",
+ "#tc-root .tc-tab.selected{background:#303030;border-bottom-color:var(--tc-accent);color:#fff}",
+ "#tc-root .tc-body .tc-tabs{margin:12px 0 8px;padding:0 3px;border:1px solid var(--tc-line)}",
+ "#tc-root .tc-toggle{width:31px;min-width:31px;min-height:30px;padding:3px;font-size:17px;line-height:1}",
+ "#tc-root.tc-collapsed .tc-tabs,#tc-root.tc-collapsed .tc-body,#tc-root.tc-collapsed .tc-foot,",
+ "#tc-root.tc-collapsed .tc-settings,#tc-root.tc-collapsed .tc-settings-btn{display:none!important}",
+ "#tc-root.tc-collapsed .tc-head{padding-top:4px;padding-bottom:4px;min-height:34px}",
+ "#tc-root .tc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:8px 0}",
+ "#tc-root .tc-section{",
+ "  font-size:11px;line-height:1.35;letter-spacing:0;font-weight:700;",
+ "  color:#d7d7d7;background:#292929;border-left:2px solid var(--tc-accent);",
+ "  padding:5px 8px;margin:12px 0 7px",
+ "}",
+ "#tc-root .tc-status{font-size:11px;line-height:1.45;color:#b5b5b5;margin:3px 0;padding:0;overflow-wrap:anywhere}",
+ "#tc-root .tc-status:before{",
+ "  content:\"\";display:inline-block;width:7px;height:7px;margin:0 6px 1px 0;",
+ "  vertical-align:middle;border-radius:50%;background:#888",
+ "}",
+ "#tc-root .tc-status-unavailable:before{background:#d45d58}",
+ "#tc-root .tc-status-location:before{background:#d5a44d}",
+ "#tc-root .tc-status-likely:before{background:#70b38b}",
+ "#tc-root .tc-pager{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:9px 0}",
+ "#tc-root .tc-roster{max-height:450px;overflow:auto}",
+ "#tc-root [hidden]{display:none!important}",
+ "@media(max-width:570px){",
+ "  #tc-root .tc-grid.rosters{grid-template-columns:1fr}",
+ "  #tc-root .tc-body{padding:8px}",
+ "  #tc-root .tc-head{gap:5px;padding:5px 7px}",
+ "  #tc-root .tc-head .tc-muted{display:none}",
+ "  #tc-root .tc-btn{min-height:38px}",
+ "  #tc-root .tc-input{min-height:42px;font-size:16px}",
+ "  #tc-root .tc-tab{min-height:42px}",
+ "  #tc-root .tc-toggle{min-height:38px;width:38px;min-width:38px}",
+ "}"
 ].join('');
 const state={tab:'attack',sub:'watch',watchPage:0,chainPage:0,collapsed:store.get('combatCollapsed',false)===true,target:null,player:null,playerError:'',own:'',enemy:'',left:null,right:null,warError:'',loading:false};
 const apiCache=new Map(),inflight=new Map(),requests=[];
@@ -347,10 +402,10 @@ function renderChain(){
  const items=chain();if(!items.length){body.append(muted('No planned hits yet.'));return}
  const nameOf=target=>watchlist().find(x=>x.id===target)?.name||'Player '+target;
  const current=items[0];
- body.append(card(h('div',{class:'tc-section'},'CURRENT CHAIN TARGET'),
+ body.append(h('div',{class:'tc-card tc-current'},h('div',{class:'tc-section'},'Current chain target'),
   row(main(title(nameOf(current)+' ['+current+']'),statusBadge(current)),
    attack(current),btn('Skip current target',()=>{saveChain(removeHitAt(chain(),0));state.chainPage=0;render()},true)),
-  muted('Skip removes only this hit from your chain; it does not remove your watchlist entry.')));
+  muted('Skipping removes this hit only. The watchlist entry stays saved.')));
  const rest=items.slice(1),pages=Math.max(1,Math.ceil(rest.length/9));
  state.chainPage=Math.max(0,Math.min(state.chainPage,pages-1));
  const start=state.chainPage*9,visible=rest.slice(start,start+9);
@@ -431,9 +486,9 @@ function boot(){
  collapseBtn.classList.add('tc-toggle');
  collapseBtn.setAttribute('aria-controls','tc-tabs tc-body');
  root=h('section',{id:'tc-root','aria-label':'Torn Toolkit Combat Edition'},
-  h('div',{class:'tc-head'},title('TORN TOOLKIT'),muted('COMBAT '+VER),
+  h('div',{class:'tc-head'},title('Torn Toolkit'),muted('Combat · '+VER),
    h('span',{style:'flex:1'}),
-   h('button',{type:'button',class:'tc-btn tc-soft tc-settings-btn',onclick:showSettings},'API settings'),
+   h('button',{type:'button',class:'tc-btn tc-soft tc-settings-btn',onclick:showSettings},'Settings'),
    collapseBtn),
   tabs,body,h('div',{class:'tc-muted tc-foot',style:'padding:7px 12px;border-top:1px solid #3a4752'},'Manual actions only'));
  applyCollapsed();mount();renderTabs();state.target=targetFromUrl();render();loadTarget(state.target);
