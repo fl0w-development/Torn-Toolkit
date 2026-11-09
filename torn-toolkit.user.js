@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Toolkit — Combat Edition
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      0.6.0
+// @version      0.6.1
 // @description  Manual target watchlists, solo chain lists and read-only faction rosters. No gameplay automation.
 // @author       fl0w-development
 // @copyright    Copyright (c) 2026 fl0w-development
@@ -17,7 +17,7 @@
 // ==/UserScript==
 (function(){
 'use strict';
-const VER='0.6.0',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
+const VER='0.6.1',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
 const isPda=!PDA.includes('#'),hasGM=typeof GM_getValue==='function'&&typeof GM_setValue==='function';
 const store={
  get(k,f){try{if(hasGM)return GM_getValue(k,f);const v=localStorage.getItem('tt_'+k);return v==null?f:JSON.parse(v)}catch(_){return f}},
@@ -274,6 +274,8 @@ const css=[
  " #tc-root .tc-toggle{min-width:38px;width:38px}",
  " #tc-root .tc-settings-btn{min-width:56px}",
  " #tc-root .tc-card{padding:11px}",
+ " #tc-root .tc-tabs{padding:5px;gap:2px}",
+ " #tc-root .tc-tab{padding:7px 3px;min-height:42px;font-size:10px}",
  "}",
  "@media(prefers-reduced-motion:reduce){",
  " #tc-root::before,#tc-root::after{animation:none;will-change:auto;opacity:.32}",
@@ -281,7 +283,7 @@ const css=[
  " #tc-root .tc-switch input::after{transition:none}",
  "}"
 ].join('');
-const state={view:'watch',lastView:'watch',watchPage:0,chainPage:0,rosterPage:0,rosterSide:'own',rosterQuery:'',collapsed:store.get('combatCollapsed',true)===true,target:null,player:null,playerError:'',own:'',enemy:'',left:null,right:null,warError:'',loading:false};
+const state={view:'watch',lastView:'watch',watchPage:0,chainPage:0,factionPage:0,rosterPage:0,rosterSide:'own',rosterQuery:'',collapsed:store.get('combatCollapsed',true)===true,target:null,player:null,playerError:'',own:'',enemy:'',left:null,right:null,warError:'',loading:false};
 const apiCache=new Map(),inflight=new Map(),requests=[];
 async function api(path,params={},ttl=300){
  if(!key())throw Error('Add an API key in Settings');
@@ -380,6 +382,100 @@ async function processStatusQueue(){
   }
  }finally{statusBusy=false}
 }
+// Optional shared faction chain: local private solo chain stays independent.
+const factionState={plan:null,draft:null,draftRevision:0,loading:false,busy:false,error:'',lastFetch:0};
+function validateServiceUrl(value){
+ try{
+  const parsed=new URL(String(value||'').trim());
+  if(parsed.protocol!=='https:'||parsed.username||parsed.password||parsed.search||parsed.hash||
+     (parsed.pathname!=='/'&&parsed.pathname!==''))return null;
+  return parsed.origin;
+ }catch(_){return null}
+}
+function factionBase(){return validateServiceUrl(store.get('factionServiceUrl',''))}
+function connectedFaction(){
+ const info=store.get('factionSession',null),base=factionBase();
+ return info&&base&&info.server===base&&typeof info.token==='string'&&info.token.length>20&&
+  Number(info.expires_at)>Date.now()/1000+5?info:null;
+}
+function disconnectFaction(){
+ store.del('factionSession');factionState.plan=null;factionState.draft=null;
+ factionState.lastFetch=0;factionState.error='';if(state.view==='faction')render();
+}
+async function factionRequest(route,method='GET',data=null,token=null){
+ const base=factionBase();
+ if(!base)throw Error('Configure the faction service HTTPS address in Settings.');
+ const headers={'Accept':'application/json'};
+ if(data!==null)headers['Content-Type']='application/json';
+ if(token)headers.Authorization='Bearer '+token;
+ let response;
+ try{
+  response=await fetch(base+route,{method,headers,mode:'cors',credentials:'omit',
+   cache:'no-store',body:data===null?undefined:JSON.stringify(data)});
+ }catch(_){throw Error('Faction service unreachable. Verify the HTTPS address and CORS settings.')}
+ let result;
+ try{result=await response.json()}catch(_){throw Error('Faction service returned an invalid response.')}
+ if(!response.ok){
+  const error=new Error(String(result.error||'Faction service error').slice(0,170));
+  error.status=response.status;throw error;
+ }
+ return result;
+}
+async function connectFaction(){
+ if(factionState.busy)return;
+ if(!key()){factionState.error='Add your Torn API key in Settings first.';render();return}
+ factionState.busy=true;factionState.error='';render();
+ try{
+  // Explicit opt-in: sends existing Torn API key once over HTTPS for Torn-backed verification.
+  const result=await factionRequest('/v1/session','POST',{key:key()});
+  if(typeof result.token!=='string'||!good(result.user_id)||!good(result.faction_id)||
+     !Number.isFinite(Number(result.expires_at)))throw Error('Faction login response was invalid.');
+  store.set('factionSession',{server:factionBase(),token:result.token,
+   user_id:result.user_id,faction_id:result.faction_id,editor:result.editor===true,
+   expires_at:result.expires_at});
+  factionState.plan=null;
+ }catch(e){factionState.error=String(e.message||e)}
+ finally{factionState.busy=false;render()}
+ if(connectedFaction())void refreshFactionPlan();
+}
+async function refreshFactionPlan(){
+ const session=connectedFaction();
+ if(!session||factionState.loading)return;
+ factionState.loading=true;factionState.error='';render();
+ try{
+  const result=await factionRequest('/v1/plan','GET',null,session.token);
+  if(result.faction_id!==session.faction_id)throw Error('Faction identity mismatch. Reconnect.');
+  if(!Array.isArray(result.entries)||!Number.isInteger(result.revision))throw Error('Invalid faction plan data.');
+  factionState.plan={...result,entries:result.entries.filter(x=>x&&good(x.id)).map(x=>({id:norm(x.id)}))};
+  factionState.lastFetch=Date.now();
+ }catch(e){
+  factionState.error=String(e.message||e);
+  if(e.status===401){store.del('factionSession');factionState.plan=null;factionState.draft=null}
+ }finally{factionState.loading=false;if(state.view==='faction')render()}
+}
+function startFactionDraft(){
+ const session=connectedFaction(),plan=factionState.plan;
+ if(!session||!session.editor||!plan)return;
+ factionState.draft=plan.entries.map(x=>({...x}));
+ factionState.draftRevision=plan.revision;state.factionPage=0;render();
+}
+async function publishFactionDraft(){
+ const session=connectedFaction();
+ if(!session||!session.editor||!factionState.draft||factionState.busy)return;
+ factionState.busy=true;factionState.error='';render();
+ try{
+  const result=await factionRequest('/v1/plan','PUT',{
+   revision:factionState.draftRevision,entries:factionState.draft
+  },session.token);
+  if(!Array.isArray(result.entries)||!Number.isInteger(result.revision))throw Error('Invalid publish response.');
+  factionState.plan=result;factionState.draft=null;factionState.lastFetch=Date.now();
+  state.factionPage=0;
+ }catch(e){
+  factionState.error=String(e.message||e);
+  if(e.status===401){store.del('factionSession');factionState.plan=null;factionState.draft=null}
+ }finally{factionState.busy=false;if(state.view==='faction')render()}
+}
+
 let root,body,tabs,collapseBtn,headCounts;
 function applyCollapsed(){
  root.classList.toggle('tc-collapsed',state.collapsed);
@@ -418,7 +514,7 @@ function renderSettings(){
   placeholder:isPda?'Torn PDA key connected':'16-character Torn API key',value:isPda?'':key()});
  const message=muted('');
  const form=h('div',{class:'tc-settings'},title('Your API key'),input,
-  muted('Stored on this device; requests go to api.torn.com only.'),
+  muted('Your key stays on this device for standard features. Optional Faction Chain login sends it once to the HTTPS faction service you configure.'),
   row(btn('Save key',async()=>{
    if(isPda){showSettings();return}
    const k=input.value.trim();
@@ -447,13 +543,29 @@ function renderSettings(){
   h('div',{},title('Aurora ambience'),
    muted('Slow, atmospheric background lighting · respects reduced-motion preferences')),
   auroraToggle));
+ const serviceInput=h('input',{class:'tc-input',placeholder:'https://your-faction-service.example',
+  value:store.get('factionServiceUrl',''),type:'url'});
+ const serviceMessage=muted('');
+ body.append(h('div',{class:'tc-settings'},
+  title('Faction Chain service'),
+  muted('Optional, configured by your leader. Use its HTTPS domain only. Connecting from Faction Chain sends your API key to that server for verification; it is never sent just by saving this URL.'),
+  serviceInput,
+  row(btn('Save service',()=>{
+   const entered=serviceInput.value.trim(),valid=entered?validateServiceUrl(entered):'';
+   if(entered&&!valid){serviceMessage.textContent='Enter an HTTPS address with no path, query or password.';return}
+   store.set('factionServiceUrl',valid);
+   store.del('factionSession');factionState.plan=null;factionState.draft=null;
+   serviceMessage.textContent=valid?'Saved. Open Faction Chain to connect.':'Faction service disconnected.';
+  },true)),
+  serviceMessage));
 }
 function switchView(view){
- if(!['watch','chain','war'].includes(view))return;
+ if(!['watch','chain','faction','war'].includes(view))return;
  state.view=view;state.lastView=view;renderTabs();render();body.scrollTop=0;
+ if(view==='faction'&&connectedFaction()&&!factionState.plan)void refreshFactionPlan();
 }
 function renderTabs(){
- tabs.replaceChildren(...[['watch','Targets'],['chain','Chain'],['war','War']].map(([id,label])=>
+ tabs.replaceChildren(...[['watch','Targets'],['chain','Solo Chain'],['faction','Faction Chain'],['war','War']].map(([id,label])=>
   h('button',{type:'button',role:'tab',class:'tc-tab'+(state.view===id?' selected':''),
    'aria-selected':String(state.view===id),onclick:()=>switchView(id)},label)));
 }
@@ -468,6 +580,7 @@ function render(){
   body.append(h('div',{class:'tc-notice'},'Add your API key in Settings to load player conditions and rosters.'));
  if(state.view==='watch')renderWatchPage();
  else if(state.view==='chain')renderChain();
+ else if(state.view==='faction')renderFactionChain();
  else if(state.view==='war')renderWar();
  else renderSettings();
  body.scrollTop=previousScroll;
@@ -586,6 +699,102 @@ function renderChain(){
   btn('Clear chain',()=>{if(confirm('Clear your solo chain list?')){saveChain([]);state.chainPage=0;render()}},true)));
  enqueueStatuses(visibleIds);
 }
+function renderFactionChain(){
+ const session=connectedFaction(),base=factionBase(),plan=factionState.plan;
+ body.append(h('div',{class:'tc-view-header'},title('Faction chain'),
+  muted(session?('Faction '+session.faction_id+(session.editor?' · Leader controls':' · View only')):'Shared hit order')));
+ if(factionState.error)body.append(h('div',{class:'tc-notice'},factionState.error));
+ if(!base){
+  body.append(h('div',{class:'tc-empty'},'Faction sharing is not configured yet.'));
+  body.append(muted('Ask your leader for the Torn Toolkit faction service URL, then enter it under Settings.'));
+  body.append(btn('Open Settings',showSettings,true));
+  return;
+ }
+ if(!key()){
+  body.append(h('div',{class:'tc-empty'},'Add your Torn API key in Settings to connect to your faction.'));
+  return;
+ }
+ if(!session){
+  body.append(h('div',{class:'tc-card'},
+   title('Connect to your faction'),
+   muted('This optional shared feature sends your existing Torn API key to '+base+
+    ' over HTTPS once per connection. The service verifies your identity with Torn, then returns a short-lived session token. The key is not stored by the service.'),
+   btn(factionState.busy?'Connecting…':'Connect faction',()=>{void connectFaction()})));
+  return;
+ }
+ body.append(row(btn(factionState.loading?'Loading…':'Refresh order',()=>{void refreshFactionPlan()},true),
+  btn('Disconnect',disconnectFaction,true)));
+ if(!plan){
+  body.append(h('div',{class:'tc-empty'},factionState.loading?'Loading your faction’s published chain…':'No chain loaded yet.'));
+  return;
+ }
+ const published=plan.updated_at?
+  'Published '+new Date(plan.updated_at*1000).toLocaleString()+
+   (plan.updated_by?' by ['+plan.updated_by+']':''):
+  'No order published yet';
+ body.append(muted('Revision '+plan.revision+' · '+published));
+ const editing=session.editor&&Array.isArray(factionState.draft);
+ if(session.editor){
+  if(!editing)body.append(row(btn(plan.revision?'Edit published order':'Create chain order',startFactionDraft),
+   muted('Leadership can publish changes for the whole faction.')));
+  else {
+   body.append(h('div',{class:'tc-notice'},'Editing draft · Only Publish updates the list faction members see.'));
+   const id=h('input',{class:'tc-input',placeholder:'Target player ID',inputmode:'numeric',maxlength:10});
+   const error=muted('');
+   body.append(row(main(id),btn('Add hit',()=>{
+    if(!good(id.value)){error.textContent='Enter a valid Torn player ID';return}
+    if(factionState.draft.length>=150){error.textContent='Maximum 150 hits';return}
+    factionState.draft.push({id:norm(id.value)});
+    state.factionPage=Math.floor((factionState.draft.length-1)/5);render();
+   })),error);
+   body.append(row(
+    btn('Use my Solo Chain',()=>{
+     if(factionState.draft.length&&!confirm('Replace the current draft with your private Solo Chain?'))return;
+     factionState.draft=chain().map(id=>({id}));state.factionPage=0;render();
+    },true),
+    btn('Clear draft',()=>{
+     if(confirm('Clear this draft?')){factionState.draft=[];state.factionPage=0;render()}
+    },true)));
+  }
+ }
+ const items=editing?factionState.draft:plan.entries;
+ const page=pageSlice(items,state.factionPage,5);
+ state.factionPage=page.page;
+ if(!items.length)body.append(h('div',{class:'tc-empty'},
+  editing?'Add target IDs or import your Solo Chain, then publish.':'No faction chain targets published.'));
+ const visibleIds=page.items.map(x=>norm(x.id));
+ page.items.forEach((item,j)=>{
+  const index=page.start+j,name=watchlist().find(x=>x.id===norm(item.id))?.name||'Player';
+  const actions=[attack(item.id)];
+  if(editing)actions.push(
+   btn('↑',()=>{factionState.draft=move(factionState.draft,index,-1);render()},true),
+   btn('↓',()=>{factionState.draft=move(factionState.draft,index,1);render()},true),
+   btn('Remove',()=>{factionState.draft=removeHitAt(factionState.draft,index);render()},true));
+  const rowNode=card(row(
+   muted('#'+(index+1)),
+   main(title(name+' ['+item.id+']'),statusBadge(item.id)),
+   h('div',{class:'tc-actions'},...actions)));
+  rowNode.classList.add('tc-entry');
+  body.append(rowNode);
+ });
+ if(page.pages>1){
+  const pager=h('div',{class:'tc-pager'},
+   btn('← Prev',()=>{state.factionPage--;render();body.scrollTop=0},true),
+   muted((page.page+1)+' / '+page.pages),
+   btn('Next →',()=>{state.factionPage++;render();body.scrollTop=0},true));
+  pager.querySelectorAll('button')[0].disabled=page.page===0;
+  pager.querySelectorAll('button')[1].disabled=page.page===page.pages-1;
+  body.append(pager);
+ }
+ if(editing)body.append(row(
+  btn(factionState.busy?'Publishing…':'Publish faction order',()=>{void publishFactionDraft()}),
+  btn('Discard edits',()=>{factionState.draft=null;state.factionPage=0;render()},true)));
+ else body.append(muted(session.editor?'This order is published to your faction. Choose Edit to update it.':'Faction chain is read-only for members. Attack links are manual.'));
+ if(visibleIds.length){
+  body.append(btn('Refresh target conditions',()=>enqueueStatuses(visibleIds,true),true));
+  enqueueStatuses(visibleIds);
+ }
+}
 function renderWar(){
  body.append(h('div',{class:'tc-view-header'},title('Faction rosters'),muted('Read-only · manual actions')));
  const own=h('input',{class:'tc-input',placeholder:'Your faction ID',inputmode:'numeric',value:state.own});
@@ -686,6 +895,11 @@ function boot(){
   if(!root.isConnected||root.parentElement!==host())mount();
  },1500);
  setInterval(()=>{if(!document.hidden&&!state.collapsed)updateStatusNodes()},15000);
+ setInterval(()=>{
+  if(state.view==='faction'&&!state.collapsed&&!document.hidden&&
+   connectedFaction()&&!factionState.draft&&!factionState.loading&&!factionState.busy&&
+   Date.now()-factionState.lastFetch>60000)void refreshFactionPlan();
+ },60000);
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});
 else boot();
