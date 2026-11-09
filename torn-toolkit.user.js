@@ -318,16 +318,35 @@ function statusLabel(id){
  const age=Math.max(0,Math.floor((Date.now()-entry.checkedAt)/1000));
  return label+' — '+desc+' · Checked '+(age<60?'just now':Math.floor(age/60)+'m ago');
 }
+function conciseStatus(id){
+ const entry=statusCache.get(id);
+ if(checkingStatusId===id)return 'Checking condition…';
+ if(!entry)return key()?'Not checked':'API key required';
+ if(entry.error)return 'Status unavailable · refresh to retry';
+ const state=entry.state==='Unknown'?'Unconfirmed':entry.state;
+ let tail='';
+ if(entry.availability==='location')tail=' · location-dependent';
+ else if(entry.availability==='likely')tail=' · likely available';
+ else if(entry.availability==='unavailable')tail=' · unavailable';
+ if(entry.until){
+  const sec=entry.until-Math.floor(Date.now()/1000);
+  if(sec>0)tail+=' · '+Math.ceil(sec/60)+'m left';
+  else tail+=' · refresh status';
+ }
+ return state+tail;
+}
 function statusBadge(id){
  const entry=statusCache.get(id);
- return h('div',{class:'tc-status tc-status-'+(entry?entry.availability:'unknown'),'data-status-id':id},statusLabel(id));
+ return h('div',{class:'tc-status tc-status-'+(entry?entry.availability:'unknown'),
+  'data-status-id':id,title:statusLabel(id)},conciseStatus(id));
 }
 function updateStatusNodes(){
  if(!root)return;
  root.querySelectorAll('[data-status-id]').forEach(el=>{
   const id=el.getAttribute('data-status-id'),entry=statusCache.get(id);
   el.className='tc-status tc-status-'+(entry?entry.availability:'unknown');
-  el.textContent=statusLabel(id);
+  el.textContent=conciseStatus(id);
+  el.setAttribute('title',statusLabel(id));
  });
 }
 function enqueueStatuses(ids,force=false){
@@ -416,6 +435,18 @@ function renderSettings(){
    location.reload();
   }),btn('Back',showSettings,true)),message);
  body.append(form);
+ const auroraToggle=h('input',{
+  type:'checkbox',checked:store.get('combatAurora',true)!==false,
+  'aria-label':'Enable ambient aurora background',
+  onchange:()=>{
+   store.set('combatAurora',auroraToggle.checked);
+   root.classList.toggle('tc-no-aurora',!auroraToggle.checked);
+  }
+ });
+ body.append(h('label',{class:'tc-switch'},
+  h('div',{},title('Aurora ambience'),
+   muted('Slow, atmospheric background lighting · respects reduced-motion preferences')),
+  auroraToggle));
 }
 function switchView(view){
  if(!['watch','chain','war'].includes(view))return;
