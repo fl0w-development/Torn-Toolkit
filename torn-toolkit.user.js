@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Torn Toolkit — Combat Edition
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      0.7.0
-// @description  Manual target watchlists, solo chain lists and read-only faction rosters. No gameplay automation.
+// @version      0.8.0
+// @description  Manual target watchlists, solo chain lists, faction chain orders, war rosters and enemy activity. No gameplay automation.
 // @author       fl0w-development
 // @copyright    Copyright (c) 2026 fl0w-development
 // @license      PolyForm-Strict-1.0.0
@@ -17,7 +17,7 @@
 // ==/UserScript==
 (function(){
 'use strict';
-const VER='0.7.0',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
+const VER='0.8.0',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
 const isPda=!PDA.includes('#'),hasGM=typeof GM_getValue==='function'&&typeof GM_setValue==='function';
 const store={
  get(k,f){try{if(hasGM)return GM_getValue(k,f);const v=localStorage.getItem('tt_'+k);return v==null?f:JSON.parse(v)}catch(_){return f}},
@@ -60,8 +60,79 @@ function addWatch(id,name){
 function members(response){
  const raw=response&&response.members,arr=Array.isArray(raw)?raw:raw&&typeof raw==='object'?Object.entries(raw).map(([id,v])=>({id,...v})):[];
  return arr.filter(x=>x&&good(x.id)).map(x=>({id:norm(x.id),name:String(x.name||'Player '+x.id),
-  level:x.level==null?'?':x.level,status:String(x.status&& (x.status.description||x.status.state)||'Unknown')}));
+  level:x.level==null?'?':x.level,status:String(x.status&& (x.status.description||x.status.state)||'Unknown'),
+  lastStatus:String(x.last_action&&x.last_action.status||''),lastTs:Number(x.last_action&&x.last_action.timestamp)||0}));
 }
+// ACTIVITY-CORE-START
+// Enemy activity: built from Torn's public faction member list, stored only on this device.
+// Week cells hold [samples, share of members online]; member cells hold [samples, online].
+// Older data fades out (about 7% per day) and members unseen for 30 days are dropped.
+const ACT_DECAY=0.93,ACT_MAX_DAYS=30,ACT_MIN_HOURS=12;
+function actBucket(ts){const d=new Date(ts*1000);return{dow:(d.getUTCDay()+6)%7,hour:d.getUTCHours(),day:Math.floor(ts/86400)}}
+function actWeight(status){const s=String(status||'').toLowerCase();return s==='online'?1:s==='idle'?0.5:0}
+function actNewFaction(){return{updated:0,day:0,lastPoll:0,week:Array.from({length:168},()=>[0,0]),members:{}}}
+function actDecay(f,day){
+ if(f.day&&day>f.day){
+  const k=Math.pow(ACT_DECAY,day-f.day);
+  f.week.forEach(c=>{c[0]*=k;c[1]*=k});
+  for(const m of Object.values(f.members))m.h.forEach(c=>{c[0]*=k;c[1]*=k});
+ }
+ f.day=Math.max(f.day||0,day);
+}
+function actRecord(f,roster,now){
+ const b=actBucket(now);actDecay(f,b.day);
+ if(!roster.length)return f;
+ const share=roster.reduce((a,p)=>a+actWeight(p.lastStatus),0)/roster.length;
+ const cell=f.week[b.dow*24+b.hour];cell[0]+=1;cell[1]+=share;
+ roster.forEach(p=>{
+  const m=f.members[p.id]||(f.members[p.id]={n:p.name,h:Array.from({length:24},()=>[0,0]),p:0,seen:b.day});
+  m.n=p.name;m.seen=b.day;
+  m.h[b.hour][0]+=1;m.h[b.hour][1]+=actWeight(p.lastStatus);
+  // They acted while we weren't checking (e.g. Torn was closed): count that hour as active.
+  if(m.p&&p.lastTs&&p.lastTs>m.p&&p.lastTs<now-300){
+   const hb=actBucket(p.lastTs).hour;
+   if(hb!==b.hour){m.h[hb][0]+=1;m.h[hb][1]+=1}
+  }
+  m.p=now;
+ });
+ for(const [id,m] of Object.entries(f.members))if(b.day-m.seen>ACT_MAX_DAYS)delete f.members[id];
+ f.updated=now;return f;
+}
+function actRates(cells){return cells.map(c=>c&&c[0]>=1?c[1]/c[0]:null)}
+function actFactionHours(f){
+ const out=[];
+ for(let hr=0;hr<24;hr++){let n=0,a=0;for(let d=0;d<7;d++){const c=f.week[d*24+hr];n+=c[0];a+=c[1]}out.push(n>=1?a/n:null)}
+ return out;
+}
+function actKnown(rates){return rates.filter(r=>r!=null).length}
+function actQuietWindow(rates,len){
+ len=len||5;let best=null;
+ for(let st=0;st<24;st++){
+  let sum=0,ok=true;
+  for(let i=0;i<len;i++){const r=rates[(st+i)%24];if(r==null){ok=false;break}sum+=r}
+  if(ok&&(!best||sum/len<best.avg))best={start:st,end:(st+len)%24,avg:sum/len};
+ }
+ return best;
+}
+function actBusiest(rates){let b=-1;rates.forEach((r,i)=>{if(r!=null&&(b<0||r>rates[b]))b=i});return b<0?null:b}
+const actHH=x=>String(x).padStart(2,'0');
+function actOfflineLine(m){
+ if(!m)return null;
+ const r=actRates(m.h),known=actKnown(r);
+ if(known<ACT_MIN_HOURS)return{learning:true,known,text:'learning activity ('+known+'/'+ACT_MIN_HOURS+' hours seen)'};
+ let best={len:0,start:0};
+ for(let st=0;st<24;st++){
+  let len=0;
+  while(len<23){const v=r[(st+len)%24];if(v==null||v>=0.2)break;len++}
+  if(len>best.len)best={len,start:st};
+ }
+ if(best.len>=3)return{learning:false,start:best.start,end:(best.start+best.len)%24,
+  text:'usually offline '+actHH(best.start)+'–'+actHH((best.start+best.len)%24)+' TCT'};
+ const eve=[17,18,19,20,21,22,23].map(x=>r[x]).filter(x=>x!=null);
+ if(eve.length>=4&&eve.reduce((a,b)=>a+b,0)/eve.length>0.5)return{learning:false,text:'online most evenings'};
+ return{learning:false,text:'no clear pattern yet'};
+}
+// ACTIVITY-CORE-END
 function move(list,i,d){const j=i+d,v=list.slice();if(j>=0&&j<v.length)[v[i],v[j]]=[v[j],v[i]];return v}
 // Remove exactly one planned hit; duplicates elsewhere in the chain remain.
 function removeHitAt(list,index){const v=list.slice();if(Number.isInteger(index)&&index>=0&&index<v.length)v.splice(index,1);return v}
@@ -296,6 +367,20 @@ const css=[
  " border-top:1px solid var(--tc-line);font:11px var(--tc-mono);color:var(--tc-muted);background:rgba(6,10,19,.5)}",
  "#tc-root .tc-foot a,#tc-root .tc-contact a{color:var(--tc-accent);text-decoration:none}",
  "#tc-root .tc-foot a:hover,#tc-root .tc-contact a:hover{text-decoration:underline}",
+ "#tc-root .tc-heat{display:grid;grid-template-columns:30px repeat(24,minmax(0,1fr));gap:2px;margin:8px 0 4px;font:10px var(--tc-mono)}",
+ "#tc-root .tc-heat-h{color:var(--tc-muted);white-space:nowrap;overflow:visible}",
+ "#tc-root .tc-heat-d{color:var(--tc-muted);align-self:center}",
+ "#tc-root .tc-heat-c{aspect-ratio:1/1;border-radius:2px}",
+ "#tc-root .tc-heat-c.tc-nodata{background:repeating-linear-gradient(135deg,rgba(232,236,242,.05) 0 2px,transparent 2px 5px)}",
+ "#tc-root .tc-heat-c.tc-quiet{outline:1px dashed rgba(242,196,109,.65);outline-offset:-1px}",
+ "#tc-root .tc-legend{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font:10px var(--tc-mono);color:var(--tc-muted);margin:2px 0 10px}",
+ "#tc-root .tc-legend i{display:inline-block;width:12px;height:12px;border-radius:2px}",
+ "#tc-root .tc-strip{display:grid;grid-template-columns:repeat(24,minmax(0,1fr));gap:1px;margin:5px 0 2px}",
+ "#tc-root .tc-strip i{height:8px;border-radius:1px;background:repeating-linear-gradient(135deg,rgba(232,236,242,.05) 0 2px,transparent 2px 5px)}",
+ "#tc-root .tc-stat{display:flex;gap:18px;flex-wrap:wrap;margin:4px 0 10px}",
+ "#tc-root .tc-stat b{display:block;font:italic 400 20px/1.1 var(--tc-serif);color:var(--tc-ink)}",
+ "#tc-root .tc-stat span{font:10.5px var(--tc-mono);color:var(--tc-muted)}",
+ "#tc-root .tc-habit{font:11px var(--tc-mono);color:#c9b8ff;margin:2px 0}",
  "#tc-root .tc-roster-row{border-bottom:1px solid var(--tc-line);padding:9px 0}",
  "#tc-root.tc-collapsed .tc-tabs,#tc-root.tc-collapsed .tc-body,#tc-root.tc-collapsed .tc-foot,",
  "#tc-root.tc-collapsed .tc-settings,#tc-root.tc-collapsed .tc-settings-btn{display:none!important}",
@@ -328,7 +413,7 @@ const css=[
  " #tc-root .tc-switch input::after{transition:none}",
  "}"
 ].join('');
-const state={view:'watch',lastView:'watch',watchPage:0,chainPage:0,factionPage:0,rosterPage:0,rosterSide:'own',rosterQuery:'',collapsed:store.get('combatCollapsed',true)===true,target:null,player:null,playerError:'',own:'',enemy:'',left:null,right:null,warError:'',loading:false};
+const state={view:'watch',lastView:'watch',watchPage:0,chainPage:0,factionPage:0,rosterPage:0,rosterSide:'own',rosterQuery:'',collapsed:store.get('combatCollapsed',true)===true,target:null,player:null,playerError:'',own:store.get('combatWarFactions',{}).own||'',enemy:store.get('combatWarFactions',{}).enemy||'',left:null,right:null,warError:'',loading:false,actPage:0};
 const apiCache=new Map(),inflight=new Map(),requests=[];
 async function api(path,params={},ttl=300){
  if(!key())throw Error('Add an API key in Settings');
@@ -548,6 +633,14 @@ function renderSettings(){
   h('div',{},title('Aurora ambience'),
    muted('Aurora and twinkling stars · respects reduced-motion preferences')),
   auroraToggle));
+ const activityToggle=h('input',{type:'checkbox',checked:store.get('combatActivityOn',true)!==false,
+  'aria-label':'Track enemy faction activity',
+  onchange:()=>{store.set('combatActivityOn',activityToggle.checked);if(activityToggle.checked)void actPoll(true)}});
+ body.append(h('label',{class:'tc-switch'},
+  h('div',{},title('Enemy activity tracking'),
+   muted('Checks the enemy faction from the War tab about every 5 minutes while Torn is open. Saved only in this browser.')),
+  activityToggle));
+ body.append(row(confirmBtn('Clear activity data',()=>{store.del(ACT_KEY);render()},true)));
  body.append(h('div',{class:'tc-contact tc-muted',style:'margin-top:12px'},'Found a bug or need help? Message ',contactLink(),' in Torn.'));
 
 }
@@ -621,7 +714,9 @@ function renderWatch(){
     row(btn('Save',()=>{const all=watchlist(),current=all.find(t=>t.id===x.id);
      if(current){current.group=category.value;current.note=note.value.slice(0,200);saveWatch(all)}render()}),
     btn('Cancel',()=>{editor.hidden=true},true)));
+   const habit=actMemberLine(x.id);
    const entry=card(row(main(title(x.name+' ['+x.id+']'),statusBadge(x.id),
+     habit&&!habit.learning?h('div',{class:'tc-habit'},habit.text):null,
      muted(x.group+(x.note?' · '+x.note:''))),
     h('div',{class:'tc-actions'},attack(x.id),
      btn('+ Chain',()=>{saveChain([...chain(),x.id]);state.chainPage=0;switchView('chain')},true),
@@ -797,6 +892,7 @@ function renderWar(){
    if(state.loading)return;
    if(!good(own.value)||!good(enemy.value)){state.warError='Enter valid IDs for both factions';render();return}
    state.own=norm(own.value);state.enemy=norm(enemy.value);state.loading=true;
+   store.set('combatWarFactions',{own:state.own,enemy:state.enemy});void actPoll(true);
    state.warError='';state.left=null;state.right=null;
    state.rosterSide='own';state.rosterPage=0;state.rosterQuery='';render();
    try{
@@ -813,7 +909,8 @@ function renderWar(){
  if(state.left&&state.right){
   const selectors=h('div',{class:'tc-tabs'},...[
    ['own','Your faction ('+state.left.length+')'],
-   ['enemy','Enemy ('+state.right.length+')']
+   ['enemy','Enemy ('+state.right.length+')'],
+   ['activity','Activity']
   ].map(([side,label])=>h('button',{type:'button',
    class:'tc-tab'+(state.rosterSide===side?' selected':''),
    onclick:()=>{
@@ -824,8 +921,10 @@ function renderWar(){
   body.append(selectors,search,total,list,pager);
   const paint=()=>{
    const buttons=selectors.querySelectorAll('button');
-   buttons[0].classList.toggle('selected',state.rosterSide==='own');
-   buttons[1].classList.toggle('selected',state.rosterSide==='enemy');
+   ['own','enemy','activity'].forEach((side,i)=>buttons[i].classList.toggle('selected',state.rosterSide===side));
+   const showActivity=state.rosterSide==='activity';
+   search.hidden=showActivity;total.hidden=showActivity;
+   if(showActivity){pager.hidden=true;list.replaceChildren(activityView());return}
    const all=state.rosterSide==='own'?state.left:state.right;
    const q=state.rosterQuery.trim().toLowerCase();
    const filtered=all.filter(p=>p.name.toLowerCase().includes(q)||p.id.includes(q));
@@ -848,6 +947,88 @@ function renderWar(){
   paint();
  }
  body.append(muted('Roster data is public API information, not verified battle stats. Shared war planning is not enabled.'));
+}
+// Activity tracking (browser side): one public faction/members request every ~5 minutes
+// while Torn is open, shared between tabs, saved only in this browser.
+const ACT_KEY='combatActivity',ACT_EVERY=300;
+function actLoad(){const d=store.get(ACT_KEY,null);return d&&d.v===1&&d.factions?d:{v:1,factions:{}}}
+let actBusy=false;
+async function actPoll(force){
+ if(actBusy||store.get('combatActivityOn',true)===false||!key())return;
+ const fid=store.get('combatWarFactions',{}).enemy;if(!good(fid))return;
+ const now=Math.floor(Date.now()/1000),data=actLoad();
+ const f=data.factions[fid]||(data.factions[fid]=actNewFaction());
+ if(!force&&now-f.lastPoll<ACT_EVERY-20)return; // another tab checked recently
+ f.lastPoll=now;store.set(ACT_KEY,data);actBusy=true;
+ try{
+  const roster=members(await api('faction/'+fid+'/members',{},60));
+  const fresh=actLoad(),ff=fresh.factions[fid]||(fresh.factions[fid]=actNewFaction());
+  actRecord(ff,roster,now);ff.lastPoll=now;
+  for(const [k,v] of Object.entries(fresh.factions))if(k!==fid&&now-(v.updated||0)>ACT_MAX_DAYS*86400)delete fresh.factions[k];
+  store.set(ACT_KEY,fresh);
+  if(state.view==='war'&&state.rosterSide==='activity')render();
+ }catch(_){/* try again next time */}
+ finally{actBusy=false}
+}
+function actMemberLine(id){
+ const data=actLoad();
+ for(const f of Object.values(data.factions)){const m=f.members&&f.members[id];if(m)return actOfflineLine(m)}
+ return null;
+}
+const ACT_DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+function actColor(v){
+ if(v==null)return '';
+ if(v<=0.02)return 'background:rgba(232,236,242,.06)';
+ const a=(0.14+v*0.86).toFixed(2);
+ return 'background:'+(v>0.6?'rgba(170,140,255,'+a+')':'rgba(142,240,200,'+a+')');
+}
+function activityView(){
+ const wrap=h('div'),f=actLoad().factions[state.enemy];
+ if(store.get('combatActivityOn',true)===false){
+  wrap.append(h('div',{class:'tc-empty'},'Activity tracking is off. Turn it on in Settings.'));return wrap;
+ }
+ const hours=f?actFactionHours(f):Array(24).fill(null),known=actKnown(hours);
+ wrap.append(h('div',{class:'tc-view-header'},title('Enemy activity'),
+  muted(f&&f.updated?'last checked '+new Date(f.updated*1000).toISOString().slice(11,16)+' TCT · tracked while Torn is open':'tracked while Torn is open')));
+ const quiet=known>=ACT_MIN_HOURS?actQuietWindow(hours,5):null,busy=known>=ACT_MIN_HOURS?actBusiest(hours):null;
+ if(quiet)wrap.append(h('div',{class:'tc-stat'},
+  h('div',{},h('b',{},actHH(quiet.start)+':00–'+actHH(quiet.end)+':00'),h('span',{},'quietest window, TCT')),
+  h('div',{},h('b',{},Math.round(quiet.avg*100)+'%'),h('span',{},'online then, on average')),
+  busy!=null?h('div',{},h('b',{},actHH(busy)+':00'),h('span',{},'busiest hour')):null));
+ else wrap.append(h('div',{class:'tc-notice'},'Still learning: '+known+' of '+ACT_MIN_HOURS+' hours seen so far. The chart fills in as you play, so check back after a few sessions.'));
+ const quietHours=quiet?Array.from({length:5},(_,i)=>(quiet.start+i)%24):[];
+ const grid=h('div',{class:'tc-heat',role:'img','aria-label':'Weekly enemy activity heatmap, TCT'});
+ grid.append(h('span',{}));
+ for(let hr=0;hr<24;hr++)grid.append(h('span',{class:'tc-heat-h'},hr%3===0?actHH(hr):''));
+ for(let d=0;d<7;d++){
+  grid.append(h('span',{class:'tc-heat-d'},ACT_DAYS[d]));
+  for(let hr=0;hr<24;hr++){
+   const c=f&&f.week[d*24+hr],v=c&&c[0]>=1?c[1]/c[0]:null;
+   grid.append(h('span',{class:'tc-heat-c'+(v==null?' tc-nodata':'')+(quietHours.includes(hr)?' tc-quiet':''),
+    style:actColor(v),title:ACT_DAYS[d]+' '+actHH(hr)+':00 TCT · '+(v==null?'no data yet':Math.round(v*100)+'% online')}));
+  }
+ }
+ wrap.append(grid,h('div',{class:'tc-legend'},'rarely',...[0.05,0.3,0.55,0.8,1].map(v=>h('i',{style:actColor(v)})),'almost always',
+  quiet?h('span',{style:'margin-left:auto'},'dashed = quietest'):null));
+ // Members of the enemy roster we have data for
+ const list=(state.right||[]).map(p=>({p,m:f&&f.members[p.id]})).filter(x=>x.m);
+ wrap.append(h('div',{class:'tc-section'},'members'));
+ if(!list.length)wrap.append(h('div',{class:'tc-empty'},'No member data yet.'));
+ const page=pageSlice(list,state.actPage,5);state.actPage=page.page;
+ page.items.forEach(({p,m})=>{
+  const line=actOfflineLine(m),strip=h('div',{class:'tc-strip'});
+  actRates(m.h).forEach(v=>strip.append(h('i',{style:actColor(v)})));
+  wrap.append(h('div',{class:'tc-card'},row(main(title(p.name+' ['+p.id+']'),
+   h('div',{class:line&&!line.learning?'tc-habit':'tc-muted'},line?line.text:''),strip),attack(p.id))));
+ });
+ if(page.pages>1){
+  const pager=h('div',{class:'tc-pager'},
+   btn('← Prev',()=>{state.actPage--;render()},true),muted((page.page+1)+' / '+page.pages),btn('Next →',()=>{state.actPage++;render()},true));
+  pager.querySelectorAll('button')[0].disabled=page.page===0;pager.querySelectorAll('button')[1].disabled=page.page===page.pages-1;
+  wrap.append(pager);
+ }
+ wrap.append(muted('Recorded in this browser from Torn’s public member list, about once every 5 minutes while Torn is open. Older activity fades out over about a month. Nothing is sent anywhere else.'));
+ return wrap;
 }
 async function loadTarget(id){
  state.player=null;state.playerError='';render();
@@ -890,6 +1071,7 @@ function boot(){
   if(!root.isConnected||root.parentElement!==host())mount();
  },1500);
  setInterval(()=>{if(!document.hidden&&!state.collapsed)updateStatusNodes()},15000);
+ void actPoll(false);setInterval(()=>{void actPoll(false)},60000);
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});
 else boot();
