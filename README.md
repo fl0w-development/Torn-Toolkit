@@ -2,7 +2,7 @@
 
 combat userscript for torn. target watchlist, solo chain list, faction chain orders and war rosters, all in one panel with an aurora background. everything is manual, it never attacks or does anything for you.
 
-current version: 0.7.0
+current version: 0.8.0
 
 ## install
 
@@ -34,14 +34,19 @@ the codes arent signed so only load ones your leadership actually posted. you ne
 **war**
 put in your faction id and the enemy faction id to see both rosters with statuses and attack links. no battle stats here, its just public info.
 
+**enemy activity**
+once you load an enemy faction in the war tab the script checks their member list about every 5 minutes while you have torn open. the activity tab shows a week heatmap (tct) of when they're usually online, their quietest window and busiest hour, and a little 24h strip for each member with when they're usually offline. people on your watchlist who are in that faction get a "usually offline" line too.
+
+it needs a few sessions before it has enough to go on. old activity fades out over about a month. its all saved in your browser only, you can turn it off or clear it in settings.
+
 **settings**
-api key and the aurora on/off switch. if your phone or computer has reduced motion turned on the aurora and stars dont move.
+api key, aurora on/off, activity tracking on/off and clear activity data. if your phone or computer has reduced motion turned on the aurora and stars dont move.
 
 ## api key
 
 | | |
 |---|---|
-| data storage | only on your device |
+| data storage | only on your device (activity history fades out over about a month) |
 | data sharing | nobody |
 | purpose of use | just for you, nothing is collected |
 | key storage & sharing | saved in your browser, only sent to api.torn.com |
