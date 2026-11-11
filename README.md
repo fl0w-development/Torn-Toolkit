@@ -2,7 +2,7 @@
 
 combat userscript for torn. target watchlist, solo chain list, faction chain orders and war rosters, all in one panel with an aurora background. everything is manual, it never attacks or does anything for you.
 
-current version: 0.8.0
+current version: 0.8.1
 
 ## install
 
