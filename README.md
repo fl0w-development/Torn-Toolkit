@@ -1,6 +1,12 @@
 # Torn Toolkit — Combat Edition
 
-Manual combat companion userscript for Torn, rebuilt cleanly in **v1.0.2** to prioritize Torn PDA on iPhone.
+Manual combat companion userscript for Torn, rebuilt cleanly in **v1.0.3** to prioritize Torn PDA on iPhone.
+
+## v1.0.3 PDA visibility fallback
+
+Torn PDA now gets a small fixed-position **Torn Toolkit** launcher attached directly to the page body, following the independently proven PDA injection probe. The original Aurora panel remains in Torn's content area by default, but tapping the launcher brings that **same panel** into a fixed visible overlay independent of hidden or replaced content containers. Tapping again returns the panel to its usual content location. This is a visibility fallback and does not alter saved data or combat functions.
+
+The separate launcher is only created when the PDA API/key environment is detected; desktop users keep the original in-page experience. Test coverage checks the launcher, opening/closing, original wrapper placement and safe storage behavior.
 
 ## v1.0.2 PDA rendering fix
 
