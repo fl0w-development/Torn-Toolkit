@@ -211,6 +211,13 @@ const css=[
  " padding:14px 16px 16px;background:linear-gradient(180deg,rgba(6,10,19,.12),rgba(6,10,19,.48) 45%);",
  " scrollbar-width:thin;scrollbar-color:rgba(142,240,200,.35) transparent}",
  "#tc-root .tc-title{font-size:13px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}",
+ "#tc-root .tc-activity-hours{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px;margin:10px 0 12px}",
+ "#tc-root .tc-activity-hour{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:0;gap:3px;padding:8px 2px;border:1px solid var(--tc-line);border-radius:3px;background:rgba(255,255,255,.04)}",
+ "#tc-root .tc-activity-online{background:rgba(65,218,154,.18);border-color:rgba(65,218,154,.38)}",
+ "#tc-root .tc-activity-offline{background:rgba(240,115,128,.13);border-color:rgba(240,115,128,.3)}",
+ "#tc-root .tc-activity-mixed{background:rgba(128,147,245,.12)}",
+ "#tc-root .tc-activity-label{font:10px var(--tc-mono);white-space:nowrap;color:var(--tc-ink)}",
+ "#tc-root .tc-activity-value{font:11px var(--tc-mono);color:var(--tc-muted)}",
  "#tc-root .tc-muted{font-size:11.5px;color:var(--tc-muted);line-height:1.45;margin:2px 0}",
  "#tc-root .tc-view-header{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:0 0 12px}",
  "#tc-root .tc-view-header .tc-title{font:italic 400 19px/1.15 var(--tc-serif);letter-spacing:-.01em}",
@@ -481,6 +488,51 @@ function render(){
   else renderSettings();
  }catch(e){warn(e,'render')}
 }
+
+function renderActivity(){
+ var list=activityList();
+ if(!list.some(x=>x.id===state.activitySelected))state.activitySelected=list.length?list[0].id:'';
+ body.append(h('div',{class:'tc-view-header'},title('Activity Tracker'),txt(list.length+' / 10 tracked')),
+  txt('Shows typical online and offline hours using public Torn activity snapshots. It collects only while Torn is open and visible; hours use your device time.'));
+ var entry=input('Add Torn player ID'),msg=txt('');entry.inputMode='numeric';
+ body.append(row(grow(entry),button('Track player',()=>{
+  var error=activityAdd(entry.value);if(error){msg.textContent=error;return}
+  render();void activitySweep(true);
+ })),msg);
+ if(!list.length){body.append(h('div',{class:'tc-empty'},'No tracked players yet. Add an ID here or use + Track in Targets.'));return}
+ if(activityError)body.append(notice('Latest API check: '+activityError));
+ var picker=h('select',{class:'tc-input'},list.map(x=>h('option',{value:x.id},x.name+' ['+x.id+']')));
+ picker.value=state.activitySelected;
+ picker.addEventListener('change',()=>{state.activitySelected=picker.value;render()});
+ body.append(row(grow(picker),button('Check now',()=>{void activitySweep(true)},true),
+  button('Stop tracking',()=>{activityRemove(state.activitySelected);render()},true)));
+ var player=list.find(x=>x.id===state.activitySelected),history=activitySamples(player.id),stats=activityStats(history);
+ var last=history[history.length-1];
+ body.append(card(title(player.name+' ['+player.id+']'),
+  txt(last?'Last observed: '+last.s+' · '+new Date(last.t).toLocaleString():'Waiting for first observation'),
+  txt(stats.count+' checks over '+stats.days+' day'+(stats.days===1?'':'s')+' (last 14 days)'),linkAttack(player.id)));
+ var format=values=>values.length?values.map(activityHour).join(', '):'Not enough data yet';
+ body.append(sec('USUALLY ONLINE'),txt(format(stats.online)),
+  sec('USUALLY OFFLINE'),txt(format(stats.offline)),
+  sec('HOURLY ACTIVITY · LOCAL TIME'));
+ var grid=h('div',{class:'tc-activity-hours'});
+ stats.hours.forEach((hour,h)=>{
+  var shade='empty';
+  if(hour.total>=3&&Object.keys(hour.days).length>=2){
+   if(hour.Online/hour.total>=.65)shade='online';
+   else if(hour.Offline/hour.total>=.65)shade='offline';
+   else shade='mixed';
+  }else if(hour.total)shade='limited';
+  var label=activityHour(h);
+  grid.append(h('div',{class:'tc-activity-hour tc-activity-'+shade,
+   title:label+': '+hour.Online+' online, '+hour.Idle+' idle, '+hour.Offline+' offline ('+hour.total+' checks)'},
+   h('span',{class:'tc-activity-label'},label),
+   h('span',{class:'tc-activity-value'},hour.total?hour.Online+'/'+hour.total:'-')));
+ });
+ body.append(grid,txt('Each hour shows online checks / total checks. Green = usually online, red = usually offline, gray = not enough data. Idle is counted separately.'));
+ if(stats.days<3||stats.count<24)body.append(notice('Still learning. Check across different times for a few days. The tracker does not collect when the app is closed.'));
+}
+
 function renderWatch(){
  body.append(h('div',{class:'tc-view-header'},title('Target watchlist'),txt(watch().length+' saved · statuses checked when viewed')));
  if(state.target){
