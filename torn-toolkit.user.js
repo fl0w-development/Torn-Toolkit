@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Toolkit — Combat Edition
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      0.8.1
+// @version      0.8.2
 // @description  Manual target watchlists, solo chain lists, faction chain orders, war rosters and enemy activity. No gameplay automation.
 // @author       fl0w-development
 // @copyright    Copyright (c) 2026 fl0w-development
@@ -17,7 +17,23 @@
 // ==/UserScript==
 (function(){
 'use strict';
-const VER='0.8.1',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
+const VER='0.8.2',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
+// CRASH-REPORT-START
+// If anything fails while starting, show a small bar with the reason instead of failing silently.
+function tcReportCrash(e,where){
+ try{
+  if(document.getElementById('tc-crash'))return;
+  const msg=String(e&&e.message||e).slice(0,200),line=String(e&&e.stack||'').split('\n').slice(0,2).join(' ').slice(0,160);
+  const bar=document.createElement('div');bar.id='tc-crash';
+  bar.style.cssText='position:fixed;left:8px;right:8px;top:8px;z-index:2147483647;padding:10px 12px;border-radius:4px;'+
+   'background:#3a0f14;color:#ffd7d7;border:1px solid #ff8a8a;font:12px/1.4 system-ui,Arial,sans-serif;box-shadow:0 4px 18px rgba(0,0,0,.5)';
+  bar.textContent='Torn Toolkit '+VER+' hit an error ('+where+'): '+msg+(line?' | '+line:'')+' (tap to hide, screenshot this for fl0ww_ [4605130])';
+  bar.addEventListener('click',()=>bar.remove());
+  (document.body||document.documentElement).append(bar);
+ }catch(_){}
+}
+// CRASH-REPORT-END
+try{
 const isPda=!PDA.includes('#');
 // STORE-START
 // Use the userscript manager's storage only when it answers right away. Some phone apps
@@ -606,8 +622,11 @@ function targetFromUrl(){
  return good(id)?norm(id):null;
 }
 function host(){
+ // Use the first matching container that is actually visible; Torn pages can contain hidden copies.
  for(const selector of ['.content-wrapper','#mainContainer','#main-content','main','#content']){
-  const found=document.querySelector(selector);if(found&&!found.closest('#tc-root'))return found;
+  for(const found of document.querySelectorAll(selector)){
+   if(!found.closest('#tc-root')&&found.getClientRects().length)return found;
+  }
  }
  return document.body;
 }
@@ -1091,6 +1110,11 @@ function boot(){
  setInterval(()=>{if(!document.hidden&&!state.collapsed)updateStatusNodes()},15000);
  void actPoll(false);setInterval(()=>{void actPoll(false)},60000);
 }
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});
-else boot();
+function safeBoot(){try{boot()}catch(e){tcReportCrash(e,'startup')}}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',safeBoot,{once:true});
+else safeBoot();
+}catch(e){
+ const show=()=>tcReportCrash(e,'loading');
+ if(document.body)show();else document.addEventListener('DOMContentLoaded',show,{once:true});
+}
 })();
