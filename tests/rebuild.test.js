@@ -295,7 +295,7 @@ test('faction-wide trend uses at least two days and reports averaged online perc
  assert.match(pane.textContent,/FACTION BUSIEST HOURS/);
  assert.match(pane.textContent,/50% online/);
  assert.match(pane.textContent,/FACTION QUIETEST HOURS/);
- assert.equal(pane.querySelectorAll('.tc-activity-hour').length,48,'two separate 24h charts');
+ assert.equal(pane.querySelectorAll('.tc-activity-hour').length,24,'faction heatmap has 24 hourly cells');
  assert.equal(body.querySelector('#tt-rebuild-error'),null);
  const stop=pane.querySelectorAll('button').find(x=>x.textContent==='Stop tracking');
  stop.events.click();
