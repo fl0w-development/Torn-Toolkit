@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Toolkit — Combat Edition
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      1.0.0
+// @version      1.0.1
 // @description  Manual Torn combat companion. Clean PDA-compatible rebuild with original aurora UI.
 // @author       fl0w-development
 // @license      PolyForm-Strict-1.0.0
@@ -17,7 +17,7 @@
 // ==/UserScript==
 (function () {
 'use strict';
-var VERSION = '1.0.0';
+var VERSION = '1.0.1';
 var PDA_KEY = '###PDA-APIKEY###';
 var isPDA = PDA_KEY.indexOf('#') < 0;
 var root, body, tabs, counts;
@@ -605,11 +605,22 @@ function renderSettings(){
  body.append(h('label',{class:'tc-switch'},h('div',{},title('Aurora ambience'),txt('Aurora and twinkling stars')),check));
  body.append(txt('Issues? Message fl0ww_ [4605130] in Torn.'));
 }
+function panelHost(){
+ // Restore the placement from v0.7: inside Torn's content area,
+ // not as the first element above the website.
+ var selectors=['.content-wrapper','#mainContainer','#main-content','main','#content'];
+ for(var i=0;i<selectors.length;i++){
+  var found=document.querySelector(selectors[i]);
+  if(found && !found.closest('#tc-root'))return found;
+ }
+ return document.body;
+}
 function mount(){
- if(!document.body)return;
  var old=document.getElementById('tc-root');
  if(old && old!==root)return;
- if(!root.isConnected)document.body.insertBefore(root,document.body.firstChild);
+ var dest=panelHost();
+ if(!dest)return;
+ if(root.parentElement!==dest)dest.prepend(root);
 }
 function start(){
  try{
@@ -636,7 +647,7 @@ function start(){
   var prev=location.href;
   setInterval(()=>{
    if(location.href!==prev){prev=location.href;state.target=targetURL();if(state.view==='watch')render();}
-   if(!root.isConnected)mount();
+   if(!root.isConnected || root.parentElement!==panelHost())mount();
   },1200);
   state.target=targetURL();if(state.target){
    Promise.all([api('user/'+state.target+'/profile'),api('user/'+state.target+'/personalstats?cat=popular')])

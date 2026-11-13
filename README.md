@@ -1,6 +1,10 @@
 # Torn Toolkit — Combat Edition
 
-Manual combat companion userscript for Torn, rebuilt cleanly in **v1.0.0** to prioritize Torn PDA on iPhone.
+Manual combat companion userscript for Torn, rebuilt cleanly in **v1.0.1** to prioritize Torn PDA on iPhone.
+
+## v1.0.1 placement correction
+
+Restores the original content-area host selection from the working v0.7 interface. The Toolkit is prepended inside Torn's `.content-wrapper` (or the next recognized main content container) instead of being inserted as the first element of `document.body`, above Torn's header. The interval also remounts the panel if the page's content container changes. The Aurora styling and storage keys are unchanged.
 
 ## The interface stays the same
 
