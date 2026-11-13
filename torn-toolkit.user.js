@@ -1,62 +1,66 @@
 // ==UserScript==
 // @name         Torn Toolkit — Combat Edition
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      0.8.7
-// @description  Manual target watchlists, solo chain lists and read-only faction rosters. No gameplay automation.
+// @version      1.0.0
+// @description  Manual Torn combat companion. Clean PDA-compatible rebuild with original aurora UI.
 // @author       fl0w-development
-// @copyright    Copyright (c) 2026 fl0w-development
 // @license      PolyForm-Strict-1.0.0
 // @match        https://www.torn.com/*
+// @match        https://torn.com/*
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_deleteValue
 // @connect      api.torn.com
-// @run-at       document-idle
+// @run-at       document-end
 // @downloadURL  https://raw.githubusercontent.com/fl0w-development/Torn-Toolkit/main/torn-toolkit.user.js
 // @updateURL    https://raw.githubusercontent.com/fl0w-development/Torn-Toolkit/main/torn-toolkit.user.js
 // ==/UserScript==
-(function(){
+(function () {
 'use strict';
-const VER='0.8.7',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
-const isPda=!PDA.includes('#'),hasGM=typeof GM_getValue==='function'&&typeof GM_setValue==='function';
-// BOOT-DIAGNOSTIC-START
-// Pure DOM diagnostic: never reads, changes or deletes user storage.
-function tcBootError(error,stage){
- try{
-  const doc=document,host=doc.body||doc.documentElement;if(!host)return;
-  let bar=doc.getElementById('tc-boot-error');
-  if(!bar){bar=doc.createElement('div');bar.id='tc-boot-error';host.appendChild(bar)}
-  bar.setAttribute('role','alert');
-  bar.style.cssText='position:fixed!important;top:72px!important;left:8px!important;right:8px!important;z-index:2147483647!important;display:block!important;visibility:visible!important;background:#621d26!important;color:#fff!important;border:2px solid #ff8e8e!important;padding:12px!important;font:12px/1.5 Arial,sans-serif!important;white-space:normal!important;max-height:45vh!important;overflow:auto!important';
-  bar.textContent='Torn Toolkit '+VER+' startup error ('+stage+'): '+String(error&&error.message||error).slice(0,300);
- }catch(_){}
+var VERSION = '1.0.0';
+var PDA_KEY = '###PDA-APIKEY###';
+var isPDA = PDA_KEY.indexOf('#') < 0;
+var root, body, tabs, counts;
+var state = {view:'watch',watchPage:0,chainPage:0,factionPage:0,warPage:0,warSide:'own',collapsed:false,target:null,player:null,
+  factionId:'',memberId:'',leaderId:'',coLeaderId:'',editor:false,identityError:'',draft:null,shareCode:'',warOwn:'',warEnemy:'',warLeft:[],warRight:[],warLoaded:false};
+var cache = {};
+var busy = {};
+var status = {};
+var leader = null;
+var ERR_ID = 'tt-rebuild-error';
+function warn(error,at) {
+ try {
+  var host = document.body || document.documentElement;
+  if (!host) return;
+  var el = document.getElementById(ERR_ID);
+  if (!el) { el = document.createElement('div');el.id=ERR_ID;host.appendChild(el); }
+  el.style.cssText='position:fixed!important;top:70px!important;left:8px!important;right:8px!important;z-index:2147483647!important;color:#fff!important;background:#621d26!important;border:2px solid #ff9999!important;padding:12px!important;font:13px Arial!important';
+  el.textContent = 'Torn Toolkit '+VERSION+' '+at+': '+String(error && error.message || error).slice(0,250);
+ } catch (_) {}
 }
-function tcBootMarker(){
- try{
-  if(document.getElementById('tc-boot-marker'))return;
-  const host=document.body||document.documentElement;if(!host)return;
-  const bar=document.createElement('div');bar.id='tc-boot-marker';
-  bar.style.cssText='position:fixed!important;top:72px!important;right:8px!important;z-index:2147483646!important;background:#172f37!important;color:#fff!important;border:1px solid #7adccc!important;padding:6px 9px!important;font:11px Arial,sans-serif!important';
-  bar.textContent='Torn Toolkit '+VER+' starting…';host.appendChild(bar);
- }catch(_){}
+function storageGet(k,d) {
+ try {
+  if (typeof GM_getValue === 'function') {
+   var v=GM_getValue(k,d);
+   return v == null || (v && typeof v.then==='function') ? d : v;
+  }
+  var raw=localStorage.getItem('tt_'+k);
+  return raw===null?d:JSON.parse(raw);
+ } catch (_) {return d;}
 }
-function tcBootComplete(){
- try{const el=document.getElementById('tc-boot-marker');if(el)el.remove()}catch(_){}
+function storageSet(k,v) {
+ try {
+  if(typeof GM_setValue==='function') GM_setValue(k,v);
+  else localStorage.setItem('tt_'+k,JSON.stringify(v));
+ } catch (_) {}
 }
-// BOOT-DIAGNOSTIC-END
-try{
-tcBootMarker();
-const store={
- get(k,f){try{if(hasGM)return GM_getValue(k,f);const v=localStorage.getItem('tt_'+k);return v==null?f:JSON.parse(v)}catch(_){return f}},
- set(k,v){try{if(hasGM)GM_setValue(k,v);else localStorage.setItem('tt_'+k,JSON.stringify(v))}catch(_){}},
- del(k){try{if(hasGM&&typeof GM_deleteValue==='function')GM_deleteValue(k);else localStorage.removeItem('tt_'+k)}catch(_){}}
-};
-const key=()=>isPda?PDA:store.get('apiKey','');
-const good=id=>/^\d{1,10}$/.test(String(id).trim())&&Number(id)>0;
-const norm=id=>String(Number(id));
-const url=id=>'https://www.torn.com/page.php?sid=attack&user2ID='+encodeURIComponent(id);
-const CONTACT={name:'fl0ww_',id:'4605130'};
-const contactLink=()=>h('a',{href:'https://www.torn.com/profiles.php?XID='+CONTACT.id},CONTACT.name+' ['+CONTACT.id+']');
+function storageDel(k) {
+ try {if(typeof GM_deleteValue==='function')GM_deleteValue(k);else localStorage.removeItem('tt_'+k)}catch(_){}
+}
+function key(){return isPDA?PDA_KEY:String(storageGet('apiKey','')||'');}
+function valid(id){return /^\d{1,10}$/.test(String(id).trim()) && Number(id)>0;}
+function idOf(id){return String(Number(id));}
+function attackURL(id){return 'https://www.torn.com/page.php?sid=attack&user2ID='+encodeURIComponent(id);}
 const ranks=['Absolute beginner','Beginner','Inexperienced','Rookie','Novice','Below average','Average','Reasonable','Above average','Competent','Highly competent','Veteran','Distinguished','Highly distinguished','Professional','Star','Master','Outstanding','Celebrity','Supreme','Idolized','Champion','Heroic','Legendary','Elite','Invincible'];
 const ranges=['under ~2.5k','~2k–25k','~20k–250k','~200k–2.5m','~2m–35m','~20m–250m','over ~200m'];
 function number(v){if(v==null||v==='')return null;const n=Number(v);return Number.isFinite(n)&&n>=0?n:null}
@@ -68,96 +72,49 @@ function estimate(p,ps){
  const b=rank-count([2,6,11,26,31,50,71,100],l)-count([100,5000,10000,20000,30000,50000],c)-count([5e6,5e7,5e8,5e9,5e10],n);
  return b<0||b>6?{label:'Inconsistent rank data',confidence:'None'}:{label:ranges[b],confidence:'Low'};
 }
-function watchlist(){
- const v=store.get('combatWatchlist',[]),seen=new Set();
- return (Array.isArray(v)?v:[]).filter(x=>x&&good(x.id)).map(x=>({
-  id:norm(x.id),name:String(x.name||'Player '+x.id).slice(0,60),
-  group:['General','Farm','Chain','Rival','Other'].includes(x.group)?x.group:'General',
-  note:String(x.note||'').slice(0,200)
- })).filter(x=>{if(seen.has(x.id))return false;seen.add(x.id);return true}).slice(0,250);
+function watch(){
+ var v=storageGet('combatWatchlist',[]);
+ return (Array.isArray(v)?v:[]).filter(x=>x && valid(x.id)).map(x=>({id:idOf(x.id),name:String(x.name||'Player '+x.id).slice(0,60),group:String(x.group||'General'),note:String(x.note||'').slice(0,200)})).slice(0,250);
 }
-function chain(){const v=store.get('combatSoloChain',[]);return (Array.isArray(v)?v:[]).filter(good).map(norm).slice(0,150)}
-const saveWatch=x=>store.set('combatWatchlist',x.slice(0,250));
-const saveChain=x=>store.set('combatSoloChain',x.slice(0,150));
-function addWatch(id,name){
- if(!good(id))return false;id=norm(id);const a=watchlist();
- if(!a.some(x=>x.id===id)){a.unshift({id,name:String(name||'Player '+id).slice(0,60),group:'General',note:''});saveWatch(a)}
- return true;
-}
-function members(response){
- const raw=response&&response.members,arr=Array.isArray(raw)?raw:raw&&typeof raw==='object'?Object.entries(raw).map(([id,v])=>({id,...v})):[];
- return arr.filter(x=>x&&good(x.id)).map(x=>({id:norm(x.id),name:String(x.name||'Player '+x.id),
-  level:x.level==null?'?':x.level,status:String(x.status&& (x.status.description||x.status.state)||'Unknown')}));
-}
-function move(list,i,d){const j=i+d,v=list.slice();if(j>=0&&j<v.length)[v[i],v[j]]=[v[j],v[i]];return v}
-// Remove exactly one planned hit; duplicates elsewhere in the chain remain.
-function removeHitAt(list,index){const v=list.slice();if(Number.isInteger(index)&&index>=0&&index<v.length)v.splice(index,1);return v}
-function availability(value){
- const state=String(value||'').trim().toLowerCase();
- if(/hospital|jail|federal|fallen/.test(state))return 'unavailable';
- if(/travel|abroad/.test(state))return 'location';
- if(state==='okay')return 'likely';
- return 'unknown';
-}
-function parseStatus(response){
- const p=response&&response.profile||response||{},status=p.status;
- if(!status||typeof status!=='object')return {state:'Unknown',description:'Status not provided',until:null,availability:'unknown'};
- const state=String(status.state||'Unknown').slice(0,60);
- const description=String(status.description||state).replace(/<[^>]*>/g,'').slice(0,110);
- const seconds=Number(status.until);
- return {state,description,until:Number.isFinite(seconds)&&seconds>0?seconds:null,availability:availability(state)};
-}
-function pageSlice(items,index,size){
- const limit=Math.max(1,Math.floor(size)||1),pages=Math.max(1,Math.ceil(items.length/limit));
- const page=Math.max(0,Math.min(Number.isInteger(index)?index:0,pages-1)),start=page*limit;
- return {page,pages,start,items:items.slice(start,start+limit)};
-}
-function encodeFactionOrder(fid,author,createdAt,ids){
- if(!good(fid)||!good(author)||!Number.isInteger(createdAt)||createdAt<1600000000||
-    !Array.isArray(ids)||ids.length>150||!ids.every(good))throw Error('Invalid faction chain details');
- return 'TTFC1|'+norm(fid)+'|'+norm(author)+'|'+createdAt+'|'+ids.map(norm).join(',');
-}
-function decodeFactionOrder(raw){
- const code=String(raw||'').trim(),parts=code.split('|');
- if(code.length>1900||parts.length!==5||parts[0]!=='TTFC1'||!good(parts[1])||!good(parts[2])||
-    !/^\d{10}$/.test(parts[3]))throw Error('Invalid leader order code.');
- const ids=parts[4]?parts[4].split(','):[];
- if(ids.length>150||!ids.every(good))throw Error('Chain code contains invalid player IDs.');
- return {factionId:norm(parts[1]),authorId:norm(parts[2]),createdAt:Number(parts[3]),entries:ids.map(norm)};
-}
-const pure={good,norm,url,number,estimate,members,move,removeHitAt,availability,parseStatus,pageSlice,encodeFactionOrder,decodeFactionOrder};
-// Only bypass the browser UI when running Node's pure-function tests.
-// A web page or injected runtime can expose a global `module` object.
-if(typeof document==='undefined'&&typeof module!=='undefined'&&module.exports){module.exports=pure;return}
-function h(tag,attrs={},...kids){
- const n=document.createElement(tag);
- Object.entries(attrs).forEach(([k,v])=>{
-  if(v===false||v==null)return;
-  if(k==='class')n.className=v;else if(k==='style')n.style.cssText=v;
-  else if(k==='value')n.value=v;else if(k==='checked')n.checked=!!v;
-  else if(k.startsWith('on'))n.addEventListener(k.slice(2),v);
-  else n.setAttribute(k,v===true?'':String(v));
+function chain(){var v=storageGet('combatSoloChain',[]);return (Array.isArray(v)?v:[]).filter(valid).map(idOf).slice(0,150);}
+function saveWatch(v){storageSet('combatWatchlist',v.slice(0,250));}
+function saveChain(v){storageSet('combatSoloChain',v.slice(0,150));}
+function h(tag,attrs) {
+ var e=document.createElement(tag),children=Array.prototype.slice.call(arguments,2);
+ Object.keys(attrs||{}).forEach(k=>{
+  var v=attrs[k];if(v===undefined||v===null||v===false)return;
+  if(k==='class')e.className=v;
+  else if(k==='style')e.style.cssText=v;
+  else if(k==='value')e.value=v;
+  else if(k==='checked')e.checked=!!v;
+  else if(k==='hidden')e.hidden=!!v;
+  else if(k.slice(0,2)==='on' && typeof v==='function')e.addEventListener(k.slice(2),v);
+  else e.setAttribute(k,v===true?'':String(v));
  });
- kids.flat().forEach(x=>{if(x!=null)n.append(x instanceof Node?x:document.createTextNode(String(x)))});
- return n;
+ children.forEach(function add(c){
+  if(Array.isArray(c))return c.forEach(add);
+  if(c===null||c===undefined)return;
+  e.appendChild(c instanceof Node?c:document.createTextNode(String(c)));
+ });
+ return e;
 }
-const btn=(t,cb,secondary=false)=>h('button',{type:'button',class:'tc-btn'+(secondary?' tc-soft':''),onclick:cb},t);
-// Tap-twice confirmation instead of window.confirm(): in-app browsers (e.g. Torn PDA) may never show native dialogs.
-function confirmBtn(t,cb,secondary=false,needed=()=>true){
- let armed=false,timer=0;
- const b=btn(t,()=>{
-  if(!needed()||armed){clearTimeout(timer);cb();return}
-  armed=true;b.textContent='Tap again to confirm';b.classList.add('tc-confirm');
-  timer=setTimeout(()=>{armed=false;b.textContent=t;b.classList.remove('tc-confirm')},4000);
- },secondary);
- return b;
+function button(label,callback,soft){return h('button',{class:'tc-btn'+(soft?' tc-soft':''),type:'button',onclick:callback},label);}
+function linkAttack(id){return h('a',{class:'tc-btn tc-primary',href:attackURL(id)},'Attack');}
+function txt(text){return h('div',{class:'tc-muted'},text);}
+function title(text){return h('div',{class:'tc-title'},text);}
+function row(){return h('div',{class:'tc-row'},Array.prototype.slice.call(arguments));}
+function card(){return h('div',{class:'tc-card'},Array.prototype.slice.call(arguments));}
+function grow(){return h('div',{class:'tc-grow'},Array.prototype.slice.call(arguments));}
+function input(placeholder,value){return h('input',{class:'tc-input',placeholder:placeholder,value:value||'',inputmode:'text'});}
+function textarea(placeholder,value){var e=h('textarea',{class:'tc-input',placeholder:placeholder,rows:3});e.value=value||'';return e;}
+function sec(text){return h('div',{class:'tc-section'},text);}
+function notice(text){return h('div',{class:'tc-notice'},text);}
+function confirmButton(label,action){
+ var n=0,timer;var b=button(label,function(){
+  if(n===0){n=1;b.textContent='Tap again to confirm';timer=setTimeout(()=>{n=0;b.textContent=label},3500)}
+  else{clearTimeout(timer);action()}
+ },true);return b;
 }
-const attack=id=>h('a',{class:'tc-btn tc-primary',href:url(id),title:'Open attack page; you initiate the attack'},'Attack');
-const muted=t=>h('div',{class:'tc-muted'},t);
-const card=(...kids)=>h('div',{class:'tc-card'},...kids);
-const row=(...kids)=>h('div',{class:'tc-row'},...kids);
-const main=(...kids)=>h('div',{class:'tc-grow'},...kids);
-const title=t=>h('div',{class:'tc-title'},t);
 const css=[
  "#tc-root{",
  " --tc-ink:#e8ecf2;--tc-muted:#8c97a8;--tc-line:rgba(232,236,242,.09);",
@@ -357,573 +314,337 @@ const css=[
  " #tc-root .tc-switch input::after{transition:none}",
  "}"
 ].join('');
-const state={view:'watch',lastView:'watch',watchPage:0,chainPage:0,factionPage:0,rosterPage:0,rosterSide:'own',rosterQuery:'',collapsed:store.get('combatCollapsed',true)===true,target:null,player:null,playerError:'',own:'',enemy:'',left:null,right:null,warError:'',loading:false};
-const apiCache=new Map(),inflight=new Map(),requests=[];
-async function api(path,params={},ttl=300){
+function paginate(items,index,size){
+ var pages=Math.max(1,Math.ceil(items.length/size)),page=Math.max(0,Math.min(index,pages-1));
+ return {page:page,pages:pages,start:page*size,items:items.slice(page*size,(page+1)*size)};
+}
+function pager(page,go){
+ if(page.pages<2)return null;
+ return h('div',{class:'tc-pager'},button('← Prev',()=>go(Math.max(0,page.page-1)),true),
+  txt((page.page+1)+' / '+page.pages),button('Next →',()=>go(Math.min(page.pages-1,page.page+1)),true));
+}
+function targetURL(){
+ var u=new URL(location.href),id=null;
+ if(u.pathname==='/profiles.php')id=u.searchParams.get('XID');
+ if(u.searchParams.get('sid')==='attack')id=u.searchParams.get('user2ID')||u.searchParams.get('XID');
+ return valid(id)?idOf(id):null;
+}
+async function api(path){
  if(!key())throw Error('Add an API key in Settings');
- const q=new URLSearchParams(params),ident=path+'?'+q.toString(),cached=apiCache.get(ident);
- if(cached&&Date.now()-cached.t<ttl*1000)return cached.v;
- if(inflight.has(ident))return inflight.get(ident);
- const now=Date.now();while(requests.length&&now-requests[0]>60000)requests.shift();
- if(requests.length>=25)throw Error('API rate limit safeguard: try again shortly');
- requests.push(now);q.set('comment','TornToolkit');
- const pending=(async()=>{
-  const r=await fetch(API+path+'?'+q.toString(),{headers:{Authorization:'ApiKey '+key()}});
-  if(!r.ok)throw Error('Torn API HTTP '+r.status);
-  const v=await r.json();if(v.error)throw Error('Torn API: '+String(v.error.error||v.error.code));
-  apiCache.set(ident,{t:Date.now(),v});return v;
- })();
- inflight.set(ident,pending);try{return await pending}finally{inflight.delete(ident)}
-}
-// Status checks only run for a visible list page or explicit refresh.
-const statusCache=new Map(),statusQueue=new Map(),STATUS_TTL=90000,STATUS_PAGE_SIZE=5;
-let statusBusy=false,checkingStatusId=null;
-function statusLabel(id){
- const entry=statusCache.get(id);
- if(checkingStatusId===id)return 'Checking condition…';
- if(!entry)return key()?'Condition: Not checked':'Condition: API key required';
- if(entry.error)return 'Condition unavailable: '+entry.error+' · Refresh to try again';
- const label=entry.availability==='unavailable'?'Unavailable':entry.availability==='location'?'Location-dependent':
-  entry.availability==='likely'?'Likely available':'Unconfirmed';
- let desc=entry.state;
- if(entry.description&&entry.description.toLowerCase()!==entry.state.toLowerCase())desc+=' · '+entry.description;
- if(entry.until){
-  const secs=entry.until-Math.floor(Date.now()/1000);
-  desc+=secs>0?' · ~'+Math.ceil(secs/60)+'m remaining':' · End time passed; refresh';
- }
- const age=Math.max(0,Math.floor((Date.now()-entry.checkedAt)/1000));
- return label+' — '+desc+' · Checked '+(age<60?'just now':Math.floor(age/60)+'m ago');
-}
-function conciseStatus(id){
- const entry=statusCache.get(id);
- if(checkingStatusId===id)return 'Checking condition…';
- if(!entry)return key()?'Not checked':'API key required';
- if(entry.error)return 'Status unavailable · refresh to retry';
- const state=entry.state==='Unknown'?'Unconfirmed':entry.state;
- let tail='';
- if(entry.availability==='location')tail=' · location-dependent';
- else if(entry.availability==='likely')tail=' · likely available';
- else if(entry.availability==='unavailable')tail=' · unavailable';
- if(entry.until){
-  const sec=entry.until-Math.floor(Date.now()/1000);
-  if(sec>0)tail+=' · '+Math.ceil(sec/60)+'m left';
-  else tail+=' · refresh status';
- }
- return state+tail;
-}
-function statusBadge(id){
- const entry=statusCache.get(id);
- return h('div',{class:'tc-status tc-status-'+(entry?entry.availability:'unknown'),
-  'data-status-id':id,title:statusLabel(id)},conciseStatus(id));
-}
-function updateStatusNodes(){
- if(!root)return;
- root.querySelectorAll('[data-status-id]').forEach(el=>{
-  const id=el.getAttribute('data-status-id'),entry=statusCache.get(id);
-  el.className='tc-status tc-status-'+(entry?entry.availability:'unknown');
-  el.textContent=conciseStatus(id);
-  el.setAttribute('title',statusLabel(id));
+ var now=Date.now(),existing=cache[path];
+ if(existing && now-existing.time<90000)return existing.value;
+ var resp=await fetch('https://api.torn.com/v2/'+path+(path.includes('?')?'&':'?')+'comment=TornToolkit',{
+  headers:{Authorization:'ApiKey '+key()}
  });
+ if(!resp.ok)throw Error('Torn API HTTP '+resp.status);
+ var value=await resp.json();
+ if(value.error)throw Error(String(value.error.error||value.error.code||'Torn API error'));
+ cache[path]={time:now,value:value};return value;
 }
-function enqueueStatuses(ids,force=false){
- if(!key()||state.collapsed||document.hidden)return;
- const now=Date.now(),unique=[...new Set(ids.filter(good).map(norm))].slice(0,STATUS_PAGE_SIZE);
- for(const id of unique){
-  const old=statusCache.get(id);
-  if(!force&&old&&now-old.checkedAt<STATUS_TTL)continue;
-  statusQueue.set(id,force||statusQueue.get(id)===true);
+function statusNode(id){
+ var entry=status[id],label=entry?(entry.error?'Unavailable: '+entry.error:entry.label):key()?'Condition: Not checked':'API key required';
+ return h('div',{class:'tc-status'},label);
+}
+async function refreshStatus(ids,forced){
+ if(!key())return;
+ for(const id of ids.slice(0,5)){
+  var current=status[id];
+  if(current && !forced && Date.now()-current.time<90000)continue;
+  if(busy[id])continue;
+  busy[id]=true;
+  try{
+   var p=await api('user/'+id+'/profile');
+   var obj=p.profile||p,stat=obj.status||{},stateText=String(stat.state||'Unknown'),desc=String(stat.description||'');
+   status[id]={label:stateText+(desc && desc!==stateText?' · '+desc:''),time:Date.now()};
+  }catch(e){status[id]={error:String(e.message||e),time:Date.now()}}
+  finally{busy[id]=false}
  }
- void processStatusQueue();
+ if(root && state.view!=='settings') render();
 }
-async function processStatusQueue(){
- if(statusBusy)return;
- statusBusy=true;
- try{
-  while(statusQueue.size){
-   const [id,force]=statusQueue.entries().next().value;
-   statusQueue.delete(id);
-   const old=statusCache.get(id);
-   if(!force&&old&&Date.now()-old.checkedAt<STATUS_TTL)continue;
-   checkingStatusId=id;updateStatusNodes();
-   try{
-    const data=await api('user/'+id+'/basic',{striptags:'true'},force?0:90);
-    statusCache.set(id,{...parseStatus(data),checkedAt:Date.now()});
-   }catch(e){
-    const msg=String(e&&e.message||e).slice(0,110);
-    statusCache.set(id,{state:'Unknown',description:'',until:null,availability:'unknown',error:msg,checkedAt:Date.now()});
-    if(/rate limit|slow down/i.test(msg)){statusQueue.clear();break}
-   }finally{checkingStatusId=null;updateStatusNodes()}
-  }
- }finally{statusBusy=false}
+function switchTo(v){
+ state.view=v;tabsRender();render();
+ if(v==='faction'&&!leader)verifyFaction();
 }
-// Serverless sharing: the Torn API verifies identity and membership, but does NOT
-// store toolkit plans. Leaders share a code manually; members import a local copy.
-const factionState={identity:null,loading:false,error:'',draft:null,shareCode:''};
-function savedFactionPlan(){
- if(!factionState.identity)return null;
- const stored=store.get('combatFactionOrder_'+factionState.identity.factionId,null);
- if(!stored||stored.factionId!==factionState.identity.factionId||
-    !Array.isArray(stored.entries)||stored.entries.length>150||
-    !stored.entries.every(good))return null;
- return stored;
-}
-async function verifyFaction(){
- if(factionState.loading||!key())return;
- factionState.loading=true;factionState.error='';if(state.view==='faction')render();
- try{
-  const info=await api('key/info',{},300);
-  const owner=info&&info.info&&info.info.user||{};
-  if(!good(owner.id)||!good(owner.faction_id))throw Error('Torn did not return your faction membership.');
-  const factionId=norm(owner.faction_id),memberId=norm(owner.id);
-  const [basicResult,memberResult]=await Promise.all([
-   api('faction/'+factionId+'/basic',{},300),
-   api('faction/'+factionId+'/members',{},300)
-  ]);
-  const basic=basicResult&&basicResult.basic||{},membersList=members(memberResult);
-  if(norm(basic.id)!==factionId||!membersList.some(x=>x.id===memberId))
-   throw Error('Torn did not confirm your faction membership.');
-  factionState.identity={
-   factionId,memberId,leaderId:good(basic.leader_id)?norm(basic.leader_id):null,
-   coLeaderId:good(basic.co_leader_id)?norm(basic.co_leader_id):null,
-   editor:memberId===norm(basic.leader_id)||good(basic.co_leader_id)&&memberId===norm(basic.co_leader_id)
-  };
- }catch(e){factionState.error=String(e.message||e).slice(0,180);factionState.identity=null}
- finally{factionState.loading=false;if(state.view==='faction')render()}
-}
-function importFactionCode(input,notice){
- const id=factionState.identity;
- if(!id){notice.textContent='Verify your faction membership first.';return}
- try{
-  const order=decodeFactionOrder(input);
-  if(order.factionId!==id.factionId)throw Error('This order belongs to a different faction.');
-  if(order.authorId!==id.leaderId&&order.authorId!==id.coLeaderId)
-   throw Error('The claimed author is not your current faction leader or co-leader.');
-  // The author ID can be forged. Only trust code received directly from leadership.
-  store.set('combatFactionOrder_'+id.factionId,order);
-  state.factionPage=0;factionState.error='';render();
- }catch(e){notice.textContent=String(e.message||e)}
-}
-function generateFactionShare(){
- const id=factionState.identity,draft=factionState.draft;
- if(!id||!id.editor||!Array.isArray(draft))return;
- factionState.shareCode=encodeFactionOrder(id.factionId,id.memberId,Math.floor(Date.now()/1000),draft);
- store.set('combatFactionOrder_'+id.factionId,decodeFactionOrder(factionState.shareCode));
- factionState.draft=null;state.factionPage=0;render();
-}
-let root,body,tabs,collapseBtn,headCounts;
-function applyCollapsed(){
- root.classList.toggle('tc-collapsed',state.collapsed);
- collapseBtn.textContent=state.collapsed?'▾':'▴';
- collapseBtn.title=state.collapsed?'Expand Torn Toolkit':'Collapse Torn Toolkit';
- collapseBtn.setAttribute('aria-label',collapseBtn.title);
- collapseBtn.setAttribute('aria-expanded',String(!state.collapsed));
-}
-function toggleCollapsed(){
- state.collapsed=!state.collapsed;
- store.set('combatCollapsed',state.collapsed);
- applyCollapsed();
- if(!state.collapsed)render();
-}
-function targetFromUrl(){
- const u=new URL(location.href);
- const id=u.pathname==='/profiles.php'?u.searchParams.get('XID'):
-  ['/loader.php','/page.php'].includes(u.pathname)&&u.searchParams.get('sid')==='attack'?
-  (u.searchParams.get('user2ID')||u.searchParams.get('XID')):null;
- return good(id)?norm(id):null;
-}
-function host(){
- for(const selector of ['.content-wrapper','#mainContainer','#main-content','main','#content']){
-  const found=document.querySelector(selector);if(found&&!found.closest('#tc-root'))return found;
- }
- return document.body;
-}
-function mount(){const dest=host();if(root.parentElement!==dest)dest.prepend(root)}
-function showSettings(){
- state.view=state.view==='settings'?(state.lastView||'watch'):'settings';
- renderTabs();render();body.scrollTop=0;
-}
-function renderSettings(){
- body.append(h('div',{class:'tc-view-header'},title('API settings')));
- const input=h('input',{class:'tc-input',type:'password',maxlength:16,disabled:isPda,
-  placeholder:isPda?'Torn PDA key connected':'16-character Torn API key',value:isPda?'':key()});
- const message=muted('');
- const form=h('div',{class:'tc-settings'},title('Your API key'),input,
-  muted('Your key stays in this browser and is sent only to the official Torn API. No faction service is required.'),
-  row(btn('Save key',async()=>{
-   if(isPda){showSettings();return}
-   const k=input.value.trim();
-   if(k&&!/^[a-z0-9]{16}$/i.test(k)){message.textContent='Enter a 16-character API key';return}
-   if(k){
-    message.textContent='Verifying…';
-    try{
-     const r=await fetch(API+'key/info?comment=TornToolkit',{headers:{Authorization:'ApiKey '+k}});
-     const d=await r.json();
-     if(!r.ok||d.error)throw Error(d.error&&d.error.error||'Verification failed');
-    }catch(e){message.textContent=String(e.message);return}
-    store.set('apiKey',k);
-   }else store.del('apiKey');
-   location.reload();
-  }),btn('Back',showSettings,true)),message);
- body.append(form);
- const auroraToggle=h('input',{
-  type:'checkbox',checked:store.get('combatAurora',true)!==false,
-  'aria-label':'Enable ambient aurora background',
-  onchange:()=>{
-   store.set('combatAurora',auroraToggle.checked);
-   root.classList.toggle('tc-no-aurora',!auroraToggle.checked);
-  }
- });
- body.append(h('label',{class:'tc-switch'},
-  h('div',{},title('Aurora ambience'),
-   muted('Aurora and twinkling stars · respects reduced-motion preferences')),
-  auroraToggle));
- body.append(h('div',{class:'tc-contact tc-muted',style:'margin-top:12px'},'Found a bug or need help? Message ',contactLink(),' in Torn.'));
-
-}
-function switchView(view){
- if(!['watch','chain','faction','war'].includes(view))return;
- state.view=view;state.lastView=view;renderTabs();render();body.scrollTop=0;
- if(view==='faction'&&!factionState.identity&&!factionState.loading)void verifyFaction();
-}
-function renderTabs(){
- tabs.replaceChildren(...[['watch','Targets'],['chain','Solo Chain'],['faction','Faction Chain'],['war','War']].map(([id,label])=>
-  h('button',{type:'button',role:'tab',class:'tc-tab'+(state.view===id?' selected':''),
-   'aria-selected':String(state.view===id),onclick:()=>switchView(id)},label)));
+function tabsRender(){
+ var views=[['watch','Targets'],['chain','Solo Chain'],['faction','Faction Chain'],['war','War']];
+ tabs.replaceChildren(...views.map(x=>h('button',{class:'tc-tab'+(state.view===x[0]?' selected':''),type:'button',onclick:()=>switchTo(x[0])},x[1])));
 }
 function render(){
- const previousScroll=body.scrollTop;
- body.replaceChildren();
- if(headCounts)headCounts.replaceChildren(
-  h('span',{class:'tc-count-item'},h('b',{},watchlist().length),'Targets'),
-  h('span',{class:'tc-count-sep','aria-hidden':'true'}),
-  h('span',{class:'tc-count-item'},h('b',{},chain().length),'Queued'));
- if(!key()&&state.view!=='settings')
-  body.append(h('div',{class:'tc-notice'},'Add your API key in Settings to load player conditions and rosters.'));
- if(state.view==='watch')renderWatchPage();
- else if(state.view==='chain')renderChain();
- else if(state.view==='faction')renderFactionChain();
- else if(state.view==='war')renderWar();
- else renderSettings();
- body.scrollTop=previousScroll;
-}
-function renderWatchPage(){
- if(state.target){
-  const p=state.player&&state.player.profile||{},ps=state.player&&state.player.personalstats||{};
-  const est=state.player?estimate(p,ps):null,name=String(p.name||'Player '+state.target);
-  body.append(h('div',{class:'tc-card tc-current'},
-   row(main(title(name+' ['+state.target+']'),
-    muted(est?'Estimated stats: '+est.label+' · '+est.confidence+' confidence':
-     state.playerError||'Checking public stats…')),
-    h('div',{class:'tc-actions'},attack(state.target),
-     btn(watchlist().some(x=>x.id===state.target)?'Saved':'+ Watch',
-      ()=>{addWatch(state.target,name);render()},true)))));
- }
- renderWatch();
+ try{
+  body.replaceChildren();
+  counts.textContent=watch().length+' Targets · '+chain().length+' Queued';
+  if(!key() && state.view!=='settings')body.append(notice('Add a Torn API key in Settings to load target conditions and rosters.'));
+  if(state.view==='watch')renderWatch();
+  else if(state.view==='chain')renderChain();
+  else if(state.view==='faction')renderFaction();
+  else if(state.view==='war')renderWar();
+  else renderSettings();
+ }catch(e){warn(e,'render')}
 }
 function renderWatch(){
- body.append(h('div',{class:'tc-view-header'},title('Target watchlist'),
-  muted(watchlist().length+' saved · statuses checked when viewed')));
- const id=h('input',{class:'tc-input',placeholder:'Add Torn player ID',inputmode:'numeric',maxlength:10}),message=muted('');
- body.append(row(main(id),btn('Add target',()=>{
-  if(addWatch(id.value)){state.watchPage=0;render();body.scrollTop=0}
-  else message.textContent='Enter a valid numeric player ID';
+ body.append(h('div',{class:'tc-view-header'},title('Target watchlist'),txt(watch().length+' saved · statuses checked when viewed')));
+ if(state.target){
+  var info=state.player||{},p=info.profile||{},name=String(p.name||'Player '+state.target);
+  body.append(h('div',{class:'tc-card tc-current'},sec('CURRENT PROFILE'),row(grow(title(name+' ['+state.target+']'),
+   statusNode(state.target),info && info.profile?txt('Estimated stats: '+estimate(p,info.personalstats||{}).label+' · Low confidence'):null),linkAttack(state.target),
+   button('Add target',()=>{addTarget(state.target,name);render()},true)),
+   txt('Public data only · combat actions are always manual')));
+ }
+ var entry=input('Add Torn player ID'),message=txt('');
+ entry.inputMode='numeric';
+ body.append(row(grow(entry),button('Add target',()=>{
+  if(!valid(entry.value)){message.textContent='Enter a valid player ID';return}
+  addTarget(entry.value);state.watchPage=0;render();
  })),message);
- const search=h('input',{class:'tc-input',placeholder:'Find name or ID'});
- const group=h('select',{class:'tc-input'},...['All','General','Farm','Chain','Rival','Other'].map(g=>h('option',{value:g},g)));
- const list=h('div'),pager=h('div',{class:'tc-pager'}),summary=muted('');
- let visibleIds=[];
- body.append(h('div',{class:'tc-grid'},search,group),
-  row(btn('Refresh conditions',()=>enqueueStatuses(visibleIds,true),true),summary),
-  list,pager);
- const paint=()=>{
-  const q=search.value.toLowerCase(),filtered=watchlist().filter(x=>
-   (group.value==='All'||x.group===group.value)&&(x.name.toLowerCase().includes(q)||x.id.includes(q)));
-  const page=pageSlice(filtered,state.watchPage,STATUS_PAGE_SIZE);
-  state.watchPage=page.page;
-  visibleIds=page.items.map(x=>x.id);
-  summary.textContent=filtered.length+' result'+(filtered.length===1?'':'s')+' · API snapshots';
-  list.replaceChildren(...page.items.map(x=>{
-   const editor=h('div',{hidden:true}),category=h('select',{class:'tc-input'},
-    ...['General','Farm','Chain','Rival','Other'].map(g=>h('option',{value:g,selected:g===x.group},g)));
-   const note=h('textarea',{class:'tc-input',rows:2,maxlength:200});note.value=x.note;
-   editor.append(h('div',{class:'tc-grid'},category,note),
-    row(btn('Save',()=>{const all=watchlist(),current=all.find(t=>t.id===x.id);
-     if(current){current.group=category.value;current.note=note.value.slice(0,200);saveWatch(all)}render()}),
-    btn('Cancel',()=>{editor.hidden=true},true)));
-   const entry=card(row(main(title(x.name+' ['+x.id+']'),statusBadge(x.id),
-     muted(x.group+(x.note?' · '+x.note:''))),
-    h('div',{class:'tc-actions'},attack(x.id),
-     btn('+ Chain',()=>{saveChain([...chain(),x.id]);state.chainPage=0;switchView('chain')},true),
-     btn('Edit',()=>{editor.hidden=!editor.hidden},true),
-     btn('Remove',()=>{saveWatch(watchlist().filter(t=>t.id!==x.id));render()},true))),editor);
-   entry.classList.add('tc-entry');
-   return entry;
+ var search=input('Find name or ID'),group=h('select',{class:'tc-input'},['All','General','Farm','Chain','Rival','Other'].map(g=>h('option',{value:g},g)));
+ var list=h('div'),summary=txt(''),pageRegion=h('div');
+ body.append(h('div',{class:'tc-grid'},search,group),row(button('Refresh conditions',()=>refreshStatus(visible,true),true),summary),list,pageRegion);
+ var visible=[];
+ function paint(){
+  var q=search.value.toLowerCase();
+  var items=watch().filter(x=>(group.value==='All'||group.value===x.group) && (x.name.toLowerCase().includes(q)||x.id.includes(q)));
+  var p=paginate(items,state.watchPage,5);state.watchPage=p.page;visible=p.items.map(x=>x.id);
+  summary.textContent=items.length+' results · official API snapshots';
+  list.replaceChildren(...p.items.map(x=>{
+   var edit=h('div',{hidden:true});
+   var cat=h('select',{class:'tc-input'},['General','Farm','Chain','Rival','Other'].map(g=>h('option',{value:g,selected:g===x.group},g)));
+   cat.value=x.group;
+   var note=textarea('Note',x.note);
+   edit.append(h('div',{class:'tc-grid'},cat,note),row(button('Save',()=>{
+    var a=watch(),current=a.find(t=>t.id===x.id);
+    if(current){current.group=cat.value;current.note=note.value.slice(0,200);saveWatch(a)}render();
+   }),button('Cancel',()=>{edit.hidden=true},true)));
+   return card(row(grow(title(x.name+' ['+x.id+']'),statusNode(x.id),txt(x.group+(x.note?' · '+x.note:''))),
+    h('div',{class:'tc-actions'},linkAttack(x.id),
+     button('+ Chain',()=>{saveChain(chain().concat([x.id]));switchTo('chain')},true),
+     button('Edit',()=>{edit.hidden=!edit.hidden},true),
+     button('Remove',()=>{saveWatch(watch().filter(t=>t.id!==x.id));render()},true))),edit);
   }));
-  if(!filtered.length)list.append(h('div',{class:'tc-empty'},'No targets found.'));
-  pager.hidden=page.pages===1;
-  pager.replaceChildren(
-   btn('← Prev',()=>{state.watchPage--;paint()},true),
-   muted((page.page+1)+' / '+page.pages),
-   btn('Next →',()=>{state.watchPage++;paint()},true));
-  pager.querySelectorAll('button')[0].disabled=page.page===0;
-  pager.querySelectorAll('button')[1].disabled=page.page===page.pages-1;
-  enqueueStatuses(visibleIds);
- };
+  if(!items.length)list.append(h('div',{class:'tc-empty'},'No targets found.'));
+  pageRegion.replaceChildren(pager(p,n=>{state.watchPage=n;paint()})||'');
+  if(visible.length)void refreshStatusLater(visible);
+ }
  search.addEventListener('input',()=>{state.watchPage=0;paint()});
  group.addEventListener('change',()=>{state.watchPage=0;paint()});
  paint();
 }
-function renderChain(){
- const items=chain(),nameOf=target=>watchlist().find(x=>x.id===target)?.name||'Player '+target;
- body.append(h('div',{class:'tc-view-header'},title('Solo chain'),
-  muted(items.length+' queued · manual attacks only')));
- if(items.length){
-  const current=items[0];
-  body.append(h('div',{class:'tc-card tc-current'},
-   h('div',{class:'tc-section'},'CURRENT TARGET · #1'),
-   row(main(title(nameOf(current)+' ['+current+']'),statusBadge(current)),
-    h('div',{class:'tc-actions'},attack(current),
-     btn('Skip target',()=>{saveChain(removeHitAt(chain(),0));state.chainPage=0;render();body.scrollTop=0},true))),
-   muted('Skip removes this hit only; the watchlist stays intact.')));
- }else body.append(h('div',{class:'tc-empty'},'No hits queued. Add a player ID below or choose + Chain from Targets.'));
- const id=h('input',{class:'tc-input',placeholder:'Queue player ID',inputmode:'numeric',maxlength:10}),error=muted('');
- body.append(row(main(id),btn('Queue hit',()=>{
-  if(!good(id.value)){error.textContent='Enter a valid player ID';return}
-  saveChain([...chain(),norm(id.value)]);render();body.scrollTop=0;
- })),error);
- if(!items.length)return;
- const rest=items.slice(1),page=pageSlice(rest,state.chainPage,4);
- state.chainPage=page.page;
- const visibleIds=[items[0],...page.items],list=h('div');
- if(rest.length)body.append(h('div',{class:'tc-section'},'UPCOMING HITS'));
- page.items.forEach((target,j)=>{
-  const index=page.start+j+1;
-  const entry=card(row(muted('#'+(index+1)),
-   main(title(nameOf(target)+' ['+target+']'),statusBadge(target)),
-   h('div',{class:'tc-actions'},attack(target),
-    btn('↑',()=>{saveChain(move(chain(),index,-1));render()},true),
-    btn('↓',()=>{saveChain(move(chain(),index,1));render()},true),
-    btn('Remove',()=>{saveChain(removeHitAt(chain(),index));render()},true))));
-  entry.classList.add('tc-entry');list.append(entry);
- });
- body.append(list);
- if(page.pages>1){
-  const pager=h('div',{class:'tc-pager'},
-   btn('← Prev',()=>{state.chainPage--;render();body.scrollTop=0},true),
-   muted('Upcoming '+(page.page+1)+' / '+page.pages),
-   btn('Next →',()=>{state.chainPage++;render();body.scrollTop=0},true));
-  pager.querySelectorAll('button')[0].disabled=page.page===0;
-  pager.querySelectorAll('button')[1].disabled=page.page===page.pages-1;
-  body.append(pager);
- }
- body.append(row(btn('Refresh conditions',()=>enqueueStatuses(visibleIds,true),true),
-  confirmBtn('Clear chain',()=>{saveChain([]);state.chainPage=0;render()},true)));
- enqueueStatuses(visibleIds);
+function refreshStatusLater(ids){return refreshStatus(ids,false)}
+function addTarget(id,name){
+ if(!valid(id))return;
+ var n=idOf(id),a=watch();
+ if(!a.some(x=>x.id===n)){a.unshift({id:n,name:name||'Player '+n,group:'General',note:''});saveWatch(a)}
 }
-function renderFactionChain(){
- const identity=factionState.identity,plan=savedFactionPlan();
- body.append(h('div',{class:'tc-view-header'},title('Faction chain'),
-  muted(identity?'Faction '+identity.factionId+(identity.editor?' · Leader tools':' · Member view'):'Share codes')));
- if(factionState.error)body.append(h('div',{class:'tc-notice'},factionState.error));
- if(!key()){body.append(h('div',{class:'tc-empty'},'Add your Torn API key in Settings first.'));return}
- if(!identity){
-  body.append(h('div',{class:'tc-card'},title('Check faction membership'),
-   muted('Only your existing Torn API key is used, directly with Torn.'),
-   btn(factionState.loading?'Checking…':'Check faction',()=>{void verifyFaction()})));
+function renderChain(){
+ var entries=chain(),nameOf=id=>watch().find(x=>x.id===id)?.name||'Player '+id;
+ body.append(h('div',{class:'tc-view-header'},title('Solo chain'),txt(entries.length+' queued · manual attacks only')));
+ if(entries.length)body.append(h('div',{class:'tc-card tc-current'},sec('CURRENT TARGET · #1'),
+  row(grow(title(nameOf(entries[0])+' ['+entries[0]+']'),statusNode(entries[0])),
+   linkAttack(entries[0]),button('Skip target',()=>{saveChain(chain().slice(1));render()},true)),
+  txt('Skip removes one hit, never the watchlist entry.')));
+ else body.append(h('div',{class:'tc-empty'},'No hits queued. Add a player ID or use + Chain from Targets.'));
+ var entry=input('Queue player ID'),message=txt('');entry.inputMode='numeric';
+ body.append(row(grow(entry),button('Queue hit',()=>{
+  if(!valid(entry.value)){message.textContent='Enter a valid player ID';return}
+  saveChain(chain().concat([idOf(entry.value)]));render();
+ })),message);
+ if(!entries.length)return;
+ var p=paginate(entries.slice(1),state.chainPage,4);state.chainPage=p.page;
+ body.append(sec('UPCOMING HITS'));
+ p.items.forEach((id,j)=>{
+  var index=p.start+j+1;
+  body.append(card(row(txt('#'+(index+1)),grow(title(nameOf(id)+' ['+id+']'),statusNode(id)),linkAttack(id),
+   button('↑',()=>{var a=chain();if(index>0)[a[index-1],a[index]]=[a[index],a[index-1]];saveChain(a);render()},true),
+   button('↓',()=>{var a=chain();if(index<a.length-1)[a[index+1],a[index]]=[a[index],a[index+1]];saveChain(a);render()},true),
+   button('Remove',()=>{var a=chain();a.splice(index,1);saveChain(a);render()},true))));
+ });
+ var pg=pager(p,n=>{state.chainPage=n;render()});if(pg)body.append(pg);
+ body.append(row(button('Refresh conditions',()=>refreshStatus(entries.slice(0,5),true),true),
+  confirmButton('Clear chain',()=>{saveChain([]);render()})));
+ void refreshStatusLater(entries.slice(0,5));
+}
+function decodeShare(code){
+ var parts=String(code||'').trim().split('|');
+ if(parts.length!==5||parts[0]!=='TTFC1'||!valid(parts[1])||!valid(parts[2])||!/^\d{10}$/.test(parts[3]))throw Error('Invalid leader order code');
+ var ids=parts[4]?parts[4].split(','):[];
+ if(ids.length>150 || !ids.every(valid))throw Error('Invalid chain targets');
+ return {factionId:idOf(parts[1]),authorId:idOf(parts[2]),createdAt:Number(parts[3]),entries:ids.map(idOf)};
+}
+function savedPlan(){
+ if(!valid(state.factionId))return null;
+ var v=storageGet('combatFactionOrder_'+state.factionId,null);
+ return v && v.factionId===state.factionId && Array.isArray(v.entries)?v:null;
+}
+async function verifyFaction(){
+ if(!key())return;
+ state.identityError='Checking faction…';render();
+ try{
+  var response=await api('key/info'),user=response.info && response.info.user || {};
+  if(!valid(user.id)||!valid(user.faction_id))throw Error('Torn did not return your faction membership.');
+  var factionId=idOf(user.faction_id),memberId=idOf(user.id);
+  var results=await Promise.all([api('faction/'+factionId+'/basic'),api('faction/'+factionId+'/members')]);
+  var info=results[0].basic||{},members=parseMembers(results[1]);
+  if(!valid(info.id)||idOf(info.id)!==factionId||!members.some(x=>x.id===memberId))
+   throw Error('Torn did not confirm your faction membership.');
+  state.memberId=memberId;state.factionId=factionId;
+  state.leaderId=valid(info.leader_id)?idOf(info.leader_id):'';
+  state.coLeaderId=valid(info.co_leader_id)?idOf(info.co_leader_id):'';
+  state.editor=memberId===state.leaderId||memberId===state.coLeaderId;
+  leader=true;state.identityError='';
+ }catch(e){state.identityError=String(e.message||e);leader=null}
+ render();
+}
+function renderFaction(){
+ var plan=savedPlan();
+ body.append(h('div',{class:'tc-view-header'},title('Faction chain'),txt(state.factionId?'Faction '+state.factionId+(state.editor?' · Leader tools':' · Member view'):'Share codes')));
+ if(state.identityError)body.append(notice(state.identityError));
+ if(!key()){body.append(h('div',{class:'tc-empty'},'Set your Torn API key first.'));return}
+ if(!leader){
+  body.append(card(title('Check faction membership'),txt('Only your official Torn API key is used.'),
+   button('Check faction',verifyFaction)));
   return;
  }
- body.append(row(btn('Recheck faction',()=>{void verifyFaction()},true),
-  muted('Imported orders stay on this device.')));
- const code=h('textarea',{class:'tc-input',rows:2,maxlength:1900,
-  placeholder:'Paste the leader’s chain code from faction chat'});
- const note=muted('');
- body.append(h('div',{class:'tc-card'},title('Load leader’s order'),
-  muted('Copy the code from faction chat, then paste and load it. If clipboard access works, use the pull button.'),
-  code,row(btn('Load order',()=>importFactionCode(code.value,note)),
-   btn('Pull from clipboard',async()=>{
-    try{
-     if(!navigator.clipboard||!navigator.clipboard.readText)throw Error('Clipboard reading unavailable; paste the code instead.');
-     importFactionCode(await navigator.clipboard.readText(),note);
-    }catch(e){note.textContent=String(e.message||e)}
-   },true)),note));
- body.append(muted('Codes are not signed. Torn checks the faction and the claimed leader ID, but only trust codes directly posted by your leadership.'));
- const editing=identity.editor&&Array.isArray(factionState.draft);
- if(identity.editor){
-  if(!editing)body.append(btn(plan?'Edit local order':'Build chain order',()=>{
-   factionState.draft=plan?plan.entries.slice():[];factionState.shareCode='';
-   state.factionPage=0;render();
+ body.append(button('Recheck faction',verifyFaction,true));
+ var field=textarea('Paste leader’s chain code'),msg=txt('');
+ body.append(card(title('Load leader’s order'),txt('Paste a share code from faction chat.'),field,
+  row(button('Load order',()=>{
+   try{
+    var p=decodeShare(field.value);
+    if(p.factionId!==state.factionId)throw Error('Code belongs to another faction');
+    if(p.authorId!==state.leaderId && p.authorId!==state.coLeaderId)throw Error('Code author is not a current faction leader or co-leader');
+    storageSet('combatFactionOrder_'+state.factionId,p);state.factionPage=0;render();
+   }catch(e){msg.textContent=String(e.message||e)}
+  }),button('Pull from clipboard',async()=>{
+   try{field.value=await navigator.clipboard.readText()}catch(e){msg.textContent='Paste manually: clipboard unavailable'}
+  },true)),msg));
+ if(state.editor){
+  if(!state.draft)body.append(button(plan?'Edit local order':'Build chain order',()=>{
+   state.draft=(plan?plan.entries:[]).slice();render();
   }));
   else{
-   body.append(h('div',{class:'tc-section'},'LEADER DRAFT'));
-   const target=h('input',{class:'tc-input',placeholder:'Target player ID',inputmode:'numeric',maxlength:10}),err=muted('');
-   body.append(row(main(target),btn('Add target',()=>{
-    if(!good(target.value)){err.textContent='Enter a valid Torn player ID';return}
-    if(factionState.draft.length>=150){err.textContent='Maximum 150 targets';return}
-    factionState.draft.push(norm(target.value));state.factionPage=Math.floor((factionState.draft.length-1)/5);render();
-   })),err);
-   body.append(row(confirmBtn('Use Solo Chain',()=>{
-    factionState.draft=chain().slice();state.factionPage=0;render();
-   },true,()=>factionState.draft.length>0),confirmBtn('Clear draft',()=>{
-    factionState.draft=[];state.factionPage=0;render();
-   },true)));
-   body.append(row(btn('Generate share code',generateFactionShare),
-    btn('Discard draft',()=>{factionState.draft=null;state.factionPage=0;render()},true)));
+   var target=input('Target player ID');target.inputMode='numeric';
+   body.append(sec('LEADER DRAFT'),row(grow(target),button('Add target',()=>{
+    if(valid(target.value) && state.draft.length<150){state.draft.push(idOf(target.value));render()}
+   })),row(button('Use Solo Chain',()=>{state.draft=chain();render()},true),
+    button('Clear draft',()=>{state.draft=[];render()},true)),
+    row(button('Generate share code',()=>{
+     var t=Math.floor(Date.now()/1000);
+     state.shareCode='TTFC1|'+state.factionId+'|'+state.memberId+'|'+t+'|'+state.draft.join(',');
+     storageSet('combatFactionOrder_'+state.factionId,decodeShare(state.shareCode));state.draft=null;render();
+    }),button('Discard draft',()=>{state.draft=null;render()},true)));
   }
  }
- if(factionState.shareCode){
-  const share=h('textarea',{class:'tc-input',rows:3,readonly:true},factionState.shareCode);
-  const copied=muted('');
-  body.append(h('div',{class:'tc-card'},title('Share with faction chat'),
-   muted('Copy this code and send it to members. When the order changes, send a fresh code.'),
-   share,btn('Copy share code',async()=>{
-    let ok=false;
-    try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(factionState.shareCode);ok=true}}catch(_){}
-    if(!ok){
-     // Older and in-app browsers: select the text (setSelectionRange works on iOS) and use the legacy copy command.
-     share.focus();share.select();share.setSelectionRange(0,share.value.length);
-     try{ok=document.execCommand('copy')}catch(_){ok=false}
-    }
-    copied.textContent=ok?'Copied.':'Copy is blocked here. The code is selected: long-press it and choose Copy.';
-   }),copied));
+ if(state.shareCode){
+  var share=textarea('',state.shareCode);share.readOnly=true;
+  body.append(card(title('Share with faction chat'),share,button('Copy share code',async()=>{
+   try{await navigator.clipboard.writeText(share.value)}catch(_){share.focus();share.select()}
+  })));
  }
- const items=editing?factionState.draft:plan&&plan.entries||[];
- const page=pageSlice(items,state.factionPage,5);state.factionPage=page.page;
- body.append(h('div',{class:'tc-section'},editing?'DRAFT ORDER':plan?'LOADED ORDER':'NO ORDER LOADED'));
- if(plan&&!editing)body.append(muted('Claimed leader ['+plan.authorId+'] · '+new Date(plan.createdAt*1000).toLocaleString()+' · saved locally'));
- if(!items.length)body.append(h('div',{class:'tc-empty'},editing?'Add target IDs to your draft.':'No shared chain loaded yet.'));
- const visibleIds=page.items;
- page.items.forEach((id,j)=>{
-  const index=page.start+j,name=watchlist().find(x=>x.id===id)?.name||'Player';
-  const controls=[attack(id)];
-  if(editing)controls.push(
-   btn('↑',()=>{factionState.draft=move(factionState.draft,index,-1);render()},true),
-   btn('↓',()=>{factionState.draft=move(factionState.draft,index,1);render()},true),
-   btn('Remove',()=>{factionState.draft=removeHitAt(factionState.draft,index);render()},true));
-  const item=card(row(muted('#'+(index+1)),main(title(name+' ['+id+']'),statusBadge(id)),
-   h('div',{class:'tc-actions'},...controls)));
-  item.classList.add('tc-entry');body.append(item);
+ var order=state.draft||plan&&plan.entries||[],p=paginate(order,state.factionPage,5);state.factionPage=p.page;
+ body.append(sec(state.draft?'DRAFT ORDER':plan?'LOADED ORDER':'NO ORDER LOADED'));
+ if(!order.length)body.append(h('div',{class:'tc-empty'},'No chain order loaded.'));
+ p.items.forEach((id,j)=>{
+  var index=p.start+j,actions=[linkAttack(id)];
+  if(state.draft){
+   actions.push(button('↑',()=>{if(index>0)[state.draft[index-1],state.draft[index]]=[state.draft[index],state.draft[index-1]];render()},true),
+    button('↓',()=>{if(index<state.draft.length-1)[state.draft[index+1],state.draft[index]]=[state.draft[index],state.draft[index+1]];render()},true),
+    button('Remove',()=>{state.draft.splice(index,1);render()},true));
+  }
+  body.append(card(row(txt('#'+(index+1)),grow(title('Player ['+id+']'),statusNode(id)),h('div',{class:'tc-actions'},actions))));
  });
- if(page.pages>1){
-  const pager=h('div',{class:'tc-pager'},
-   btn('← Prev',()=>{state.factionPage--;render()},true),
-   muted((page.page+1)+' / '+page.pages),
-   btn('Next →',()=>{state.factionPage++;render()},true));
-  pager.querySelectorAll('button')[0].disabled=page.page===0;
-  pager.querySelectorAll('button')[1].disabled=page.page===page.pages-1;
-  body.append(pager);
- }
- if(visibleIds.length){
-  body.append(btn('Refresh target conditions',()=>enqueueStatuses(visibleIds,true),true));
-  enqueueStatuses(visibleIds);
- }
+ var pg=pager(p,n=>{state.factionPage=n;render()});if(pg)body.append(pg);
+ if(p.items.length)void refreshStatusLater(p.items);
+}
+function parseMembers(response){
+ var v=response.members||[],arr=Array.isArray(v)?v:Object.keys(v).map(id=>Object.assign({id:id},v[id]));
+ return arr.filter(x=>valid(x.id)).map(x=>({id:idOf(x.id),name:String(x.name||'Player '+x.id),level:x.level||'?',status:String(x.status&& (x.status.description||x.status.state)||'Unknown')}));
 }
 function renderWar(){
- body.append(h('div',{class:'tc-view-header'},title('Faction rosters'),muted('Read-only · manual actions')));
- const own=h('input',{class:'tc-input',placeholder:'Your faction ID',inputmode:'numeric',value:state.own});
- const enemy=h('input',{class:'tc-input',placeholder:'Enemy faction ID',inputmode:'numeric',value:state.enemy});
- body.append(h('div',{class:'tc-grid'},own,enemy),
-  btn(state.loading?'Loading…':'Load factions',async()=>{
-   if(state.loading)return;
-   if(!good(own.value)||!good(enemy.value)){state.warError='Enter valid IDs for both factions';render();return}
-   state.own=norm(own.value);state.enemy=norm(enemy.value);state.loading=true;
-   state.warError='';state.left=null;state.right=null;
-   state.rosterSide='own';state.rosterPage=0;state.rosterQuery='';render();
-   try{
-    const both=await Promise.all([
-     api('faction/'+state.own+'/members',{},300),
-     api('faction/'+state.enemy+'/members',{},300)
-    ]);
-    state.left=members(both[0]);state.right=members(both[1]);
-   }catch(e){state.warError=String(e.message)}
-   finally{state.loading=false;if(state.view==='war')render()}
-  }));
- if(state.loading)body.append(muted('Loading official Torn faction data…'));
- if(state.warError)body.append(h('div',{class:'tc-notice'},state.warError));
- if(state.left&&state.right){
-  const selectors=h('div',{class:'tc-tabs'},...[
-   ['own','Your faction ('+state.left.length+')'],
-   ['enemy','Enemy ('+state.right.length+')']
-  ].map(([side,label])=>h('button',{type:'button',
-   class:'tc-tab'+(state.rosterSide===side?' selected':''),
-   onclick:()=>{
-    state.rosterSide=side;state.rosterPage=0;state.rosterQuery='';search.value='';paint();
-   }},label)));
-  const search=h('input',{class:'tc-input',placeholder:'Search roster by name or ID',value:state.rosterQuery});
-  const list=h('div'),pager=h('div',{class:'tc-pager'}),total=muted('');
-  body.append(selectors,search,total,list,pager);
-  const paint=()=>{
-   const buttons=selectors.querySelectorAll('button');
-   buttons[0].classList.toggle('selected',state.rosterSide==='own');
-   buttons[1].classList.toggle('selected',state.rosterSide==='enemy');
-   const all=state.rosterSide==='own'?state.left:state.right;
-   const q=state.rosterQuery.trim().toLowerCase();
-   const filtered=all.filter(p=>p.name.toLowerCase().includes(q)||p.id.includes(q));
-   const page=pageSlice(filtered,state.rosterPage,5);
-   state.rosterPage=page.page;
-   total.textContent=filtered.length+' member'+(filtered.length===1?'':'s')+' · page '+(page.page+1)+' of '+page.pages;
-   list.replaceChildren(...page.items.map(p=>
-    h('div',{class:'tc-roster-row'},
-     row(main(title(p.name+' ['+p.id+']'),muted('Level '+p.level+' · '+p.status)),attack(p.id)))));
-   if(!filtered.length)list.append(h('div',{class:'tc-empty'},'No matching faction members.'));
-   pager.hidden=page.pages===1;
-   pager.replaceChildren(
-    btn('← Prev',()=>{state.rosterPage--;paint()},true),
-    muted((page.page+1)+' / '+page.pages),
-    btn('Next →',()=>{state.rosterPage++;paint()},true));
-   pager.querySelectorAll('button')[0].disabled=page.page===0;
-   pager.querySelectorAll('button')[1].disabled=page.page===page.pages-1;
-  };
-  search.addEventListener('input',()=>{state.rosterQuery=search.value;state.rosterPage=0;paint()});
-  paint();
+ body.append(h('div',{class:'tc-view-header'},title('Faction rosters'),txt('Read-only · manual actions')));
+ var own=input('Your faction ID',state.warOwn),enemy=input('Enemy faction ID',state.warEnemy);
+ own.inputMode=enemy.inputMode='numeric';
+ var msg=txt('');
+ body.append(h('div',{class:'tc-grid'},own,enemy),button('Load factions',async()=>{
+  if(!valid(own.value)||!valid(enemy.value)){msg.textContent='Enter two valid faction IDs';return}
+  state.warOwn=idOf(own.value);state.warEnemy=idOf(enemy.value);msg.textContent='Loading…';
+  try{
+   var result=await Promise.all([api('faction/'+state.warOwn+'/members'),api('faction/'+state.warEnemy+'/members')]);
+   state.warLeft=parseMembers(result[0]);state.warRight=parseMembers(result[1]);state.warLoaded=true;state.warPage=0;render();
+  }catch(e){msg.textContent=String(e.message||e)}
+ }),msg);
+ if(!state.warLoaded)return;
+ var sides=h('div',{class:'tc-tabs'},
+  button('Your faction ('+state.warLeft.length+')',()=>{state.warSide='own';state.warPage=0;render()},true),
+  button('Enemy ('+state.warRight.length+')',()=>{state.warSide='enemy';state.warPage=0;render()},true));
+ var search=input('Search name or ID'),list=h('div'),pg=h('div');
+ body.append(sides,search,list,pg);
+ function paint(){
+  var q=search.value.toLowerCase(),all=state.warSide==='own'?state.warLeft:state.warRight;
+  var filtered=all.filter(x=>x.name.toLowerCase().includes(q)||x.id.includes(q)),page=paginate(filtered,state.warPage,5);state.warPage=page.page;
+  list.replaceChildren(...page.items.map(x=>h('div',{class:'tc-roster-row'},row(grow(title(x.name+' ['+x.id+']'),txt('Level '+x.level+' · '+x.status)),linkAttack(x.id)))));
+  if(!filtered.length)list.append(h('div',{class:'tc-empty'},'No matching members.'));
+  pg.replaceChildren(pager(page,n=>{state.warPage=n;paint()})||'');
  }
- body.append(muted('Roster data is public API information, not verified battle stats. Shared war planning is not enabled.'));
+ search.addEventListener('input',()=>{state.warPage=0;paint()});paint();
 }
-async function loadTarget(id){
- state.player=null;state.playerError='';render();
- if(!id||!key())return;
+function renderSettings(){
+ body.append(h('div',{class:'tc-view-header'},title('API settings')));
+ var current=key(),field=input(isPDA?'Torn PDA API key is connected':'16-character API key',isPDA?'':current);
+ field.type='password';field.disabled=isPDA;
+ var message=txt('');
+ body.append(card(title('Your API key'),field,txt('Your key is sent only to the official Torn API.'),
+  row(button('Save key',()=>{
+   if(isPDA){switchTo('watch');return}
+   var value=field.value.trim();
+   if(value && !/^[a-z0-9]{16}$/i.test(value)){message.textContent='Enter a valid 16-character key';return}
+   if(value)storageSet('apiKey',value);else storageDel('apiKey');switchTo('watch');
+  }),button('Back',()=>switchTo('watch'),true)),message));
+ var enabled=storageGet('combatAurora',true)!==false;
+ var check=h('input',{type:'checkbox',checked:enabled,onchange:()=>{
+  storageSet('combatAurora',check.checked);root.classList.toggle('tc-no-aurora',!check.checked);
+ }});
+ body.append(h('label',{class:'tc-switch'},h('div',{},title('Aurora ambience'),txt('Aurora and twinkling stars')),check));
+ body.append(txt('Issues? Message fl0ww_ [4605130] in Torn.'));
+}
+function mount(){
+ if(!document.body)return;
+ var old=document.getElementById('tc-root');
+ if(old && old!==root)return;
+ if(!root.isConnected)document.body.insertBefore(root,document.body.firstChild);
+}
+function start(){
  try{
-  const data=await Promise.all([
-   api('user/'+id+'/profile',{},300),
-   api('user/'+id+'/personalstats',{cat:'popular'},300)
-  ]);
-  if(state.target!==id)return;
-  state.player={profile:data[0].profile||data[0],personalstats:data[1].personalstats||data[1]};
- }catch(e){if(state.target===id)state.playerError=String(e.message)}
- if(state.view==='watch'&&state.target===id)render();
+  if(document.getElementById('tc-root'))return;
+  var sheet=h('style',{id:'tc-style'},css);
+  (document.head||document.documentElement).appendChild(sheet);
+  var headerCount=counts=h('span',{class:'tc-count'},'');
+  body=h('div',{id:'tc-body',class:'tc-body'});
+  tabs=h('div',{id:'tc-tabs',class:'tc-tabs'});
+  state.collapsed=storageGet('combatCollapsed',false)===true;
+  root=h('section',{id:'tc-root','aria-label':'Torn Toolkit Combat Edition'},
+   h('div',{class:'tc-stars','aria-hidden':'true'}),
+   h('div',{class:'tc-head'},
+    h('div',{class:'tc-brandlock'},h('span',{class:'tc-mark'},'T'),
+     h('div',{class:'tc-brand'},title('Torn Toolkit'),txt('combat · v'+VERSION))),
+    h('span',{style:'flex:1'}),headerCount,
+    button('Settings',()=>{state.view='settings';tabsRender();render()},true),
+    button('▴',()=>{state.collapsed=!state.collapsed;storageSet('combatCollapsed',state.collapsed);root.classList.toggle('tc-collapsed',state.collapsed)},true)),
+   tabs,body,
+   h('div',{class:'tc-foot'},h('span',{},'issues? message ',h('a',{href:'https://www.torn.com/profiles.php?XID=4605130'},'fl0ww_ [4605130]')),h('span',{},'v'+VERSION)));
+  root.classList.toggle('tc-no-aurora',storageGet('combatAurora',true)===false);
+  root.classList.toggle('tc-collapsed',state.collapsed);
+  mount();tabsRender();render();
+  var prev=location.href;
+  setInterval(()=>{
+   if(location.href!==prev){prev=location.href;state.target=targetURL();if(state.view==='watch')render();}
+   if(!root.isConnected)mount();
+  },1200);
+  state.target=targetURL();if(state.target){
+   Promise.all([api('user/'+state.target+'/profile'),api('user/'+state.target+'/personalstats?cat=popular')])
+    .then(x=>{state.player={profile:x[0].profile||x[0],personalstats:x[1].personalstats||x[1]};if(state.view==='watch')render()})
+    .catch(()=>{state.player=null});
+  }
+ }catch(e){warn(e,'startup')}
 }
-function boot(){
- if(document.getElementById('tc-root'))return;
- document.head.append(h('style',{id:'tc-style'},css));
- tabs=h('div',{id:'tc-tabs',class:'tc-tabs',role:'tablist'});body=h('div',{id:'tc-body',class:'tc-body'});
- collapseBtn=btn('▴',toggleCollapsed,true);
- collapseBtn.classList.add('tc-toggle');
- collapseBtn.setAttribute('aria-controls','tc-tabs tc-body');
- headCounts=h('span',{class:'tc-count'},'');
- root=h('section',{id:'tc-root','aria-label':'Torn Toolkit Combat Edition'},
-  h('div',{class:'tc-stars','aria-hidden':'true'}),
-  h('div',{class:'tc-head'},
-   h('div',{class:'tc-brandlock'},
-    h('span',{class:'tc-mark','aria-hidden':'true'},'T'),
-    h('div',{class:'tc-brand'},title('Torn Toolkit'),muted('combat · v'+VER))),
-   h('span',{style:'flex:1'}),headCounts,
-   h('button',{type:'button',class:'tc-btn tc-soft tc-settings-btn',onclick:showSettings},'Settings'),
-   collapseBtn),
-  tabs,body,
-  h('div',{class:'tc-foot'},h('span',{},'issues? message ',contactLink()),h('span',{},'v'+VER)));
- root.classList.toggle('tc-no-aurora',store.get('combatAurora',true)===false);
- applyCollapsed();mount();renderTabs();state.target=targetFromUrl();render();loadTarget(state.target);
- let last=location.href;
- setInterval(()=>{
-  if(location.href!==last){last=location.href;const current=targetFromUrl();
-   if(current!==state.target){state.target=current;loadTarget(current)}}
-  if(!root.isConnected||root.parentElement!==host())mount();
- },1500);
- setInterval(()=>{if(!document.hidden&&!state.collapsed)updateStatusNodes()},15000);
-}
-function safeBoot(){
- try{boot();tcBootComplete()}catch(e){tcBootError(e,'boot')}
-}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',safeBoot,{once:true});
-else safeBoot();
-}catch(e){tcBootError(e,'initialization')}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});
+else start();
 })();
