@@ -240,3 +240,85 @@ test('activity tracker does not extrapolate an online pattern from insufficient 
  assert.match(pane.textContent,/Still learning/);
  assert.equal(body.querySelector('#tt-rebuild-error'),null);
 });
+
+test('faction activity uses one public roster request and counts Online Idle Offline separately',async()=>{
+ const saved={};let requests=[];
+ const mockMembers=[
+  {id:111,name:'Member One',last_action:{status:'Online'}},
+  {id:222,name:'Member Two',last_action:{status:'Idle'}},
+  {id:333,name:'Member Three',last_action:{status:'Offline'}},
+  {id:444,name:'Member Four',last_action:{status:'Unknown'}}
+ ];
+ const {body}=simulate(saved,true,{pda:true,
+  pdaGet:async (url,headers)=>{
+   requests.push({url,headers});
+   return {status:200,responseText:JSON.stringify({members:mockMembers})};
+  }
+ });
+ const activityTab=body.querySelectorAll('.tc-tab').find(x=>x.textContent==='Activity');
+ activityTab.events.click();
+ const pane=body.querySelector('#tc-body');
+ const field=pane.querySelectorAll('input')[0];
+ assert.ok(field,'faction ID field must exist');
+ field.value='999';
+ const track=pane.querySelectorAll('button').find(x=>x.textContent==='Track faction');
+ assert.ok(track,'faction track button must exist');
+ track.events.click();
+ await new Promise(resolve=>setImmediate(resolve));
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(saved.tt_combatActivityFactionId,'999');
+ assert.equal(requests.length,1,'one roster request, not one request per member');
+ assert.match(requests[0].url,/faction\/999\/members/);
+ const history=saved.tt_combatActivityFactionHistory_999;
+ assert.equal(history.length,1);
+ assert.deepEqual([history[0].online,history[0].idle,history[0].offline,history[0].total],[1,1,1,3]);
+ assert.match(body.querySelector('#tc-body').textContent,/1 online, 1 idle, 1 offline/);
+ assert.match(body.querySelector('#tc-body').textContent,/Member One/);
+ assert.equal(body.querySelector('#tt-rebuild-error'),null,'never break Aurora panel');
+});
+
+test('faction-wide trend uses at least two days and reports averaged online percentages',()=>{
+ const byDay=daysAgo=>{
+  const d=new Date();d.setDate(d.getDate()-daysAgo);d.setHours(14,20,0,0);return d.getTime();
+ };
+ const saved={
+  tt_combatActivityFactionId:'999',
+  tt_combatActivityFactionHistory_999:[
+   {t:byDay(3),online:6,idle:1,offline:3,total:10},
+   {t:byDay(2),online:4,idle:1,offline:5,total:10},
+   {t:byDay(1),online:5,idle:2,offline:3,total:10}
+  ]
+ };
+ const {body}=simulate(saved,true,{pda:true});
+ body.querySelectorAll('.tc-tab').find(x=>x.textContent==='Activity').events.click();
+ const pane=body.querySelector('#tc-body');
+ assert.match(pane.textContent,/FACTION BUSIEST HOURS/);
+ assert.match(pane.textContent,/50% online/);
+ assert.match(pane.textContent,/FACTION QUIETEST HOURS/);
+ assert.equal(pane.querySelectorAll('.tc-activity-hour').length,48,'two separate 24h charts');
+ assert.equal(body.querySelector('#tt-rebuild-error'),null);
+ const stop=pane.querySelectorAll('button').find(x=>x.textContent==='Stop tracking');
+ stop.events.click();
+ assert.equal(saved.tt_combatActivityFactionId,undefined,'stop tracking clears active faction ID');
+ assert.equal(saved.tt_combatActivityFactionHistory_999.length,3,'stop tracking preserves past observations');
+});
+
+test('activity faction history rejects unknown member states rather than assuming offline',async()=>{
+ const saved={};
+ const {body}=simulate(saved,true,{pda:true,pdaGet:async()=>({
+  status:200,responseText:JSON.stringify({members:[
+   {id:11,name:'A',last_action:{status:'Unknown'}},
+   {id:12,name:'B',status:{state:'Okay'}}
+  ]})
+ })});
+ body.querySelectorAll('.tc-tab').find(x=>x.textContent==='Activity').events.click();
+ const pane=body.querySelector('#tc-body');
+ pane.querySelectorAll('input')[0].value='999';
+ pane.querySelectorAll('button').find(x=>x.textContent==='Track faction').events.click();
+ await new Promise(resolve=>setImmediate(resolve));
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(saved.tt_combatActivityFactionHistory_999,undefined,'no fake Offline observations');
+ assert.match(body.querySelector('#tc-body').textContent,/Waiting for first roster snapshot/);
+ assert.match(body.querySelector('#tc-body').textContent,/Last faction check/);
+ assert.equal(body.querySelector('#tt-rebuild-error'),null);
+});
