@@ -2,7 +2,18 @@
 
 combat userscript for torn. target watchlist, solo chain list, faction chain orders and war rosters, all in one panel with an aurora background. everything is manual, it never attacks or does anything for you.
 
-current version: 0.8.5
+current version: 0.8.6
+
+## PDA startup diagnostics — v0.8.6
+
+The user reported repeated `SyntaxError: Unexpected identifier 's'` messages in Torn PDA's terminal, but those messages do not identify their source. The complete v0.8.5 userscript passes JavaScript parsing checks, so we cannot attribute that syntax error to the toolkit without an error location.
+
+This diagnostic release preserves the original v0.7-based functionality and saved data, and adds only early startup diagnostics:
+- A small **Torn Toolkit starting…** badge is shown during initialization and removed when the toolkit starts normally.
+- A persistent **red startup error banner** appears at the top of the page if toolkit initialization or mounting throws. It includes the stage and concise error message.
+- If **neither badge nor error banner** appears while the PDA script is listed as injected, the issue may be parsing before execution or the PDA injection environment itself. The diagnostic cannot catch a syntax error that prevents the entire userscript from parsing.
+
+No watchlists, chains, API keys or preferences are deleted or reset. This is not proof the original terminal syntax error comes from Torn Toolkit.
 
 ## PDA-compatible rollback
 

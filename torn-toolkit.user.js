@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Toolkit — Combat Edition
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      0.8.5
+// @version      0.8.6
 // @description  Manual target watchlists, solo chain lists and read-only faction rosters. No gameplay automation.
 // @author       fl0w-development
 // @copyright    Copyright (c) 2026 fl0w-development
@@ -17,8 +17,35 @@
 // ==/UserScript==
 (function(){
 'use strict';
-const VER='0.8.5',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
+const VER='0.8.6',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
 const isPda=!PDA.includes('#'),hasGM=typeof GM_getValue==='function'&&typeof GM_setValue==='function';
+// BOOT-DIAGNOSTIC-START
+// Pure DOM diagnostic: never reads, changes or deletes user storage.
+function tcBootError(error,stage){
+ try{
+  const doc=document,host=doc.body||doc.documentElement;if(!host)return;
+  let bar=doc.getElementById('tc-boot-error');
+  if(!bar){bar=doc.createElement('div');bar.id='tc-boot-error';host.appendChild(bar)}
+  bar.setAttribute('role','alert');
+  bar.style.cssText='position:fixed!important;top:72px!important;left:8px!important;right:8px!important;z-index:2147483647!important;display:block!important;visibility:visible!important;background:#621d26!important;color:#fff!important;border:2px solid #ff8e8e!important;padding:12px!important;font:12px/1.5 Arial,sans-serif!important;white-space:normal!important;max-height:45vh!important;overflow:auto!important';
+  bar.textContent='Torn Toolkit '+VER+' startup error ('+stage+'): '+String(error&&error.message||error).slice(0,300);
+ }catch(_){}
+}
+function tcBootMarker(){
+ try{
+  if(document.getElementById('tc-boot-marker'))return;
+  const host=document.body||document.documentElement;if(!host)return;
+  const bar=document.createElement('div');bar.id='tc-boot-marker';
+  bar.style.cssText='position:fixed!important;top:72px!important;right:8px!important;z-index:2147483646!important;background:#172f37!important;color:#fff!important;border:1px solid #7adccc!important;padding:6px 9px!important;font:11px Arial,sans-serif!important';
+  bar.textContent='Torn Toolkit '+VER+' starting…';host.appendChild(bar);
+ }catch(_){}
+}
+function tcBootComplete(){
+ try{const el=document.getElementById('tc-boot-marker');if(el)el.remove()}catch(_){}
+}
+// BOOT-DIAGNOSTIC-END
+try{
+tcBootMarker();
 const store={
  get(k,f){try{if(hasGM)return GM_getValue(k,f);const v=localStorage.getItem('tt_'+k);return v==null?f:JSON.parse(v)}catch(_){return f}},
  set(k,v){try{if(hasGM)GM_setValue(k,v);else localStorage.setItem('tt_'+k,JSON.stringify(v))}catch(_){}},
@@ -891,6 +918,10 @@ function boot(){
  },1500);
  setInterval(()=>{if(!document.hidden&&!state.collapsed)updateStatusNodes()},15000);
 }
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});
-else boot();
+function safeBoot(){
+ try{boot();tcBootComplete()}catch(e){tcBootError(e,'boot')}
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',safeBoot,{once:true});
+else safeBoot();
+}catch(e){tcBootError(e,'initialization')}
 })();
