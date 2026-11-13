@@ -2,26 +2,15 @@
 
 combat userscript for torn. target watchlist, solo chain list, faction chain orders and war rosters, all in one panel with an aurora background. everything is manual, it never attacks or does anything for you.
 
-current version: 0.8.4
+current version: 0.8.5
 
-## torn pda
+## PDA-compatible rollback
 
-version 0.8.4 uses PDA-compatible document-end injection and a top-right launcher inside the PDA browser, away from the browser's bottom controls. It also retries mounting briefly when the page's DOM is not ready. The same source remains compatible with desktop userscript managers.
+**v0.8.5 is a rollback to the original v0.7.0 userscript behavior.** The activity tracker introduced in v0.8.0 and all later changes are paused because the panel stopped appearing in Torn PDA. The feature work is preserved in Git history and can be reintroduced carefully once tested on a real PDA device.
 
-**Important:** Torn PDA does not necessarily replace an installed script automatically when GitHub changes. Open **Settings → Userscripts** (or **Advanced Browser Settings → Manage Scripts**, depending on app version), update Torn Toolkit from its raw source, ensure it is enabled, set injection time to **END**, and reload the **in-app Torn browser**. The updated script should display **v0.8.4** in its header.
+This restores the original v0.7.0 panel, page mounting, API calls and faction chain codes. The update uses version 0.8.5 so installed copies can receive it normally. This update does **not** delete existing watchlists, local chains, API keys, or stored activity-tracker data; the activity tracker simply isn't running.
 
-If the launcher is still absent, look for a red crash alert at the top of Torn PDA's browser. If neither appears, the script may not have injected; check its enabled state and match permissions before investigating its API key.
-
-## panel visibility
-
-the panel is now a fixed dock in the bottom-right corner, rather than being inserted into Torn's content containers. those containers sometimes hide or get replaced, which could make the toolkit disappear.
-
-- collapsed: small Torn Toolkit header with an expand arrow
-- expanded: the same aurora interface with its own internal scroll
-- works on different Torn pages without pushing the rest of the page down
-- keeps existing saved watchlists, chain orders, API key and collapse setting
-
-if the panel still doesn't appear, confirm the script is enabled and allowed to run on Torn in your userscript manager. the script also shows a red error strip if its startup fails.
+In Torn PDA, replace/update the installed script from the raw main-branch source and reload Torn. If necessary, set injection time to **END**, matching the userscript's manager defaults as supported by PDA. The script metadata itself is restored exactly except for version numbers.
 
 ## install
 
@@ -53,19 +42,14 @@ the codes arent signed so only load ones your leadership actually posted. you ne
 **war**
 put in your faction id and the enemy faction id to see both rosters with statuses and attack links. no battle stats here, its just public info.
 
-**enemy activity**
-once you load an enemy faction in the war tab the script checks their member list about every 5 minutes while you have torn open. the activity tab shows a week heatmap (tct) of when they're usually online, their quietest window and busiest hour, and a little 24h strip for each member with when they're usually offline. people on your watchlist who are in that faction get a "usually offline" line too.
-
-it needs a few sessions before it has enough to go on. old activity fades out over about a month. its all saved in your browser only, you can turn it off or clear it in settings.
-
 **settings**
-api key, aurora on/off, activity tracking on/off and clear activity data. if your phone or computer has reduced motion turned on the aurora and stars dont move.
+api key and the aurora on/off switch. if your phone or computer has reduced motion turned on the aurora and stars dont move.
 
 ## api key
 
 | | |
 |---|---|
-| data storage | only on your device (activity history fades out over about a month) |
+| data storage | only on your device |
 | data sharing | nobody |
 | purpose of use | just for you, nothing is collected |
 | key storage & sharing | saved in your browser, only sent to api.torn.com |
