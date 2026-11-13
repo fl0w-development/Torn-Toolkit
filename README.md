@@ -1,6 +1,12 @@
 # Torn Toolkit — Combat Edition
 
-Manual combat companion userscript for Torn, rebuilt cleanly in **v1.0.3** to prioritize Torn PDA on iPhone.
+Manual combat companion userscript for Torn, rebuilt cleanly in **v1.0.4** to prioritize Torn PDA on iPhone.
+
+## v1.0.4 — verified Torn PDA parsing fix
+
+**Root cause identified in Torn PDA's own source:** `UserScriptsProvider.adaptSource()` normalizes curly apostrophes (`’`) to ASCII apostrophes (`'`) after adapting the script and wrapping it for injection. The Toolkit had two single-quoted JavaScript strings containing `leader’s`. PDA rewrote them to `'leader's...'`, creating a JavaScript syntax error before any of the Toolkit code or error banners could execute.
+
+The fix uses escaped ASCII apostrophes in those two strings. The regression test performs PDA's source transformation (including wrapper and API-key substitution) on the **entire final userscript**, then parses it. The original source failed that test; the corrected code passes. No changes to UI layout, feature behavior, data storage, or PDA setup are included.
 
 ## v1.0.3 PDA visibility fallback
 

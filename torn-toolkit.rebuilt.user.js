@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Toolkit — Combat Edition
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      1.0.3
+// @version      1.0.4
 // @description  Manual Torn combat companion. Clean PDA-compatible rebuild with original aurora UI.
 // @author       fl0w-development
 // @license      PolyForm-Strict-1.0.0
@@ -17,7 +17,7 @@
 // ==/UserScript==
 (function () {
 'use strict';
-var VERSION = '1.0.3';
+var VERSION = '1.0.4';
 var PDA_KEY = '###PDA-APIKEY###';
 var isPDA = PDA_KEY.indexOf('#') < 0;
 var root, body, tabs, counts;
@@ -517,8 +517,8 @@ function renderFaction(){
   return;
  }
  body.append(button('Recheck faction',verifyFaction,true));
- var field=textarea('Paste leader’s chain code'),msg=txt('');
- body.append(card(title('Load leader’s order'),txt('Paste a share code from faction chat.'),field,
+ var field=textarea('Paste leader\'s chain code'),msg=txt('');
+ body.append(card(title('Load leader\'s order'),txt('Paste a share code from faction chat.'),field,
   row(button('Load order',()=>{
    try{
     var p=decodeShare(field.value);
