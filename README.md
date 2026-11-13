@@ -2,7 +2,15 @@
 
 combat userscript for torn. target watchlist, solo chain list, faction chain orders and war rosters, all in one panel with an aurora background. everything is manual, it never attacks or does anything for you.
 
-current version: 0.8.3
+current version: 0.8.4
+
+## torn pda
+
+version 0.8.4 uses PDA-compatible document-end injection and a top-right launcher inside the PDA browser, away from the browser's bottom controls. It also retries mounting briefly when the page's DOM is not ready. The same source remains compatible with desktop userscript managers.
+
+**Important:** Torn PDA does not necessarily replace an installed script automatically when GitHub changes. Open **Settings → Userscripts** (or **Advanced Browser Settings → Manage Scripts**, depending on app version), update Torn Toolkit from its raw source, ensure it is enabled, set injection time to **END**, and reload the **in-app Torn browser**. The updated script should display **v0.8.4** in its header.
+
+If the launcher is still absent, look for a red crash alert at the top of Torn PDA's browser. If neither appears, the script may not have injected; check its enabled state and match permissions before investigating its API key.
 
 ## panel visibility
 
