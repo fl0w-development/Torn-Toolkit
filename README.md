@@ -10,6 +10,7 @@ It's a tool to help you stay organized, **not an auto-attacker**. You still deci
 - **Solo Chain** — Set up your own hit list, change the order, and skip targets when you need to.
 - **Faction Chain** — Put together a chain order, share it with your faction, or load an order someone else sent you.
 - **War** — Look through faction rosters, search for players, and get to their attack pages without digging around.
+- **Activity Tracker** — Track individual players or a whole faction to see when they're usually active. You'll also get a quick summary under player profiles.
 - **Aurora Theme** — A clean night-sky interface that fits right into Torn.
 
 Your lists and settings are saved so you don't have to set everything up again every time.
@@ -35,9 +36,9 @@ Torn PDA can use the API key you've already configured in the app.
 
 **Already have it installed?** Update your existing script instead of adding another copy. That way you don't end up with two Toolkits running.
 
-## Latest Update — v1.0.5
+## Latest Update — v1.0.6
 
-Removed the extra bottom button on Torn PDA. The Toolkit now loads directly into the Torn page like it should.
+Added an **Activity** tab for player and faction activity tracking. You can check usual online/offline hours, see when a faction is busiest, and view a quick activity summary right on player profiles. It builds a history from public status checks while Torn is open.
 
 ## Questions or Issues?
 
