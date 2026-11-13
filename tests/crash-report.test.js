@@ -15,7 +15,8 @@ function fakeDocument(){
 
 test('a startup error is shown on screen with the version, reason and contact',()=>{
  const {added,doc}=fakeDocument();
- const report=new Function('document','VER',block+';return tcReportCrash;')(doc,'0.8.2');
+ const version=js.match(/\/\/ @version\s+(\S+)/)[1];
+ const report=new Function('document','VER',block+';return tcReportCrash;')(doc,version);
  report(new TypeError("Cannot read properties of null (reading 'own')"),'loading');
  assert.equal(added.length,1);
  assert.equal(added[0].id,'tc-crash');
@@ -31,6 +32,8 @@ test('the whole script and the boot step are wrapped',()=>{
  assert.match(js,/\}catch\(e\)\{\n const show=\(\)=>tcReportCrash\(e,'loading'\);/);
 });
 
-test('the panel only mounts into a visible container',()=>{
- assert.match(js,/found\.getClientRects\(\)\.length\)return found;/);
+test('the panel mounts to body, never into Torn content containers',()=>{
+ assert.match(js,/return document\.body\|\|document\.documentElement/);
+ assert.match(js,/dest\.append\(root\)/);
+ assert.doesNotMatch(js,/found\.getClientRects\(\)\.length\)return found/);
 });
