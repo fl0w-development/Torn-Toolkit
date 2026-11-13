@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Toolkit — Combat Edition
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      0.8.0
+// @version      0.8.1
 // @description  Manual target watchlists, solo chain lists, faction chain orders, war rosters and enemy activity. No gameplay automation.
 // @author       fl0w-development
 // @copyright    Copyright (c) 2026 fl0w-development
@@ -17,13 +17,31 @@
 // ==/UserScript==
 (function(){
 'use strict';
-const VER='0.8.0',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
-const isPda=!PDA.includes('#'),hasGM=typeof GM_getValue==='function'&&typeof GM_setValue==='function';
+const VER='0.8.1',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
+const isPda=!PDA.includes('#');
+// STORE-START
+// Use the userscript manager's storage only when it answers right away. Some phone apps
+// return nothing for unsaved keys or hand back promises, so reads always fall back safely.
+const hasGM=(()=>{
+ try{
+  if(typeof GM_getValue!=='function'||typeof GM_setValue!=='function')return false;
+  const probe=GM_getValue('combatStorageProbe',null);
+  return !(probe&&typeof probe.then==='function');
+ }catch(_){return false}
+})();
 const store={
- get(k,f){try{if(hasGM)return GM_getValue(k,f);const v=localStorage.getItem('tt_'+k);return v==null?f:JSON.parse(v)}catch(_){return f}},
+ get(k,f){
+  try{
+   let v;
+   if(hasGM)v=GM_getValue(k,f);
+   else{const raw=localStorage.getItem('tt_'+k);v=raw==null?f:JSON.parse(raw)}
+   return v==null||(typeof v==='object'&&typeof v.then==='function')?f:v;
+  }catch(_){return f}
+ },
  set(k,v){try{if(hasGM)GM_setValue(k,v);else localStorage.setItem('tt_'+k,JSON.stringify(v))}catch(_){}},
  del(k){try{if(hasGM&&typeof GM_deleteValue==='function')GM_deleteValue(k);else localStorage.removeItem('tt_'+k)}catch(_){}}
 };
+// STORE-END
 const key=()=>isPda?PDA:store.get('apiKey','');
 const good=id=>/^\d{1,10}$/.test(String(id).trim())&&Number(id)>0;
 const norm=id=>String(Number(id));
@@ -413,7 +431,7 @@ const css=[
  " #tc-root .tc-switch input::after{transition:none}",
  "}"
 ].join('');
-const state={view:'watch',lastView:'watch',watchPage:0,chainPage:0,factionPage:0,rosterPage:0,rosterSide:'own',rosterQuery:'',collapsed:store.get('combatCollapsed',true)===true,target:null,player:null,playerError:'',own:store.get('combatWarFactions',{}).own||'',enemy:store.get('combatWarFactions',{}).enemy||'',left:null,right:null,warError:'',loading:false,actPage:0};
+const state={view:'watch',lastView:'watch',watchPage:0,chainPage:0,factionPage:0,rosterPage:0,rosterSide:'own',rosterQuery:'',collapsed:store.get('combatCollapsed',true)===true,target:null,player:null,playerError:'',own:(store.get('combatWarFactions',{})||{}).own||'',enemy:(store.get('combatWarFactions',{})||{}).enemy||'',left:null,right:null,warError:'',loading:false,actPage:0};
 const apiCache=new Map(),inflight=new Map(),requests=[];
 async function api(path,params={},ttl=300){
  if(!key())throw Error('Add an API key in Settings');
@@ -955,7 +973,7 @@ function actLoad(){const d=store.get(ACT_KEY,null);return d&&d.v===1&&d.factions
 let actBusy=false;
 async function actPoll(force){
  if(actBusy||store.get('combatActivityOn',true)===false||!key())return;
- const fid=store.get('combatWarFactions',{}).enemy;if(!good(fid))return;
+ const fid=(store.get('combatWarFactions',{})||{}).enemy;if(!good(fid))return;
  const now=Math.floor(Date.now()/1000),data=actLoad();
  const f=data.factions[fid]||(data.factions[fid]=actNewFaction());
  if(!force&&now-f.lastPoll<ACT_EVERY-20)return; // another tab checked recently
