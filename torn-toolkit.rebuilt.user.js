@@ -623,7 +623,11 @@ async function factionActivitySweep(force){
  try{
   var result=await api('faction/'+id+'/members');
   if(id!==factionActivityId())return;
-  if(!factionActivityMembers(result).length)throw Error('No faction members returned');
+  var members=factionActivityMembers(result);
+  if(!members.length)throw Error('No faction members returned');
+  if(!members.some(x=>['Online','Idle','Offline'].some(v=>v.toLowerCase()===x.status.toLowerCase()))){
+   throw Error('No usable activity statuses in this faction roster');
+  }
   factionActivityRecord(id,result,Date.now());
   factionActivityError='';
  }catch(e){
