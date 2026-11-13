@@ -11,7 +11,7 @@ test('rebuild source parses and keeps the same appearance, data identifiers and 
  assert.match(js,/tc-aurora-drift/);
  assert.match(js,/tc-twinkle/);
  for(const key of ['combatWatchlist','combatSoloChain','combatFactionOrder_','combatCollapsed','combatAurora','apiKey','key/info','faction/'])assert.ok(js.includes(key),key);
- for(const name of ['Targets','Solo Chain','Faction Chain','War'])assert.ok(js.includes(name),name);
+ for(const name of ['Targets','Activity','Solo Chain','Faction Chain','War'])assert.ok(js.includes(name),name);
  assert.match(js,/@run-at\s+document-end/);
  assert.doesNotMatch(js,/module\.exports/);
  assert.doesNotMatch(js,/tc-pda-launcher|ensureMobileLauncher|mobileDrawerOpen/);
@@ -24,6 +24,8 @@ class E{
  set textContent(x){this._t=String(x);this.children=[]}
  get textContent(){return this._t+this.children.map(x=>x.textContent).join('')}
  setAttribute(k,v){this.attrs[k]=v}
+ getAttribute(k){return this.attrs[k]===undefined?null:this.attrs[k]}
+ removeChild(node){const i=this.children.indexOf(node);if(i<0)throw Error('Child absent');this.children.splice(i,1);node.parentElement=null;return node}
  addEventListener(k,fn){this.events[k]=fn}
  appendChild(n){n.parentElement=this;this.children.push(n);if(this.tagName==='select' && n.tagName==='option' && this.children.length===1)this.value=n.attrs.value||n.textContent;return n}
  append(){Array.from(arguments).forEach(n=>this.appendChild(n))}
@@ -62,17 +64,18 @@ function simulate(saved,withWrapper=false,options={}){
   querySelector:q=>q==='.content-wrapper'&&withWrapper?wrapper:null,
   addEventListener:()=>{}};
  const localStorage={getItem:key=>Object.hasOwn(saved,key)?JSON.stringify(saved[key]):null,setItem:(k,v)=>{saved[k]=JSON.parse(v)},removeItem:k=>delete saved[k]};
+ const href={href:options.pageHref||'https://www.torn.com/index.php'},intervals=[];
  const executable=options.pda?js.replace('###PDA-APIKEY###','example1234567890'):js;
  new Function('document','Node','URL','location','localStorage','GM_getValue','GM_setValue','GM_deleteValue','setInterval','setTimeout','PDA_httpGet','fetch',executable)(
-  doc,E,URLStub,{href:'https://www.torn.com/index.php'},localStorage,undefined,undefined,undefined,()=>0,()=>0,options.pdaGet,options.fetch
+  doc,E,options.pageHref?URL:URLStub,href,localStorage,undefined,undefined,undefined,fn=>{intervals.push(fn);return intervals.length},()=>0,options.pdaGet,options.fetch
  );
- return {body,doc,wrapper};
+ return {body,doc,wrapper,href,intervals};
 }
-test('actual rebuild creates aurora panel and four tabs without existing data',()=>{
+test('actual rebuild creates aurora panel and five tabs without existing data',()=>{
  const {body}=simulate({});
  const panel=body.querySelector('#tc-root');
  assert.ok(panel,'rebuilt panel should mount on the page');
- assert.equal(panel.querySelectorAll('.tc-tab').length,4);
+ assert.equal(panel.querySelectorAll('.tc-tab').length,5);
  assert.ok(body.querySelector('#tc-root').textContent.includes('Torn Toolkit'));
  assert.equal(body.querySelector('#tt-rebuild-error'),null);
 });
@@ -152,4 +155,88 @@ test('reproduces the old PDA parser failure caused by a curly apostrophe',()=>{
  const example="const message = 'Load leader’s order';";
  const rewritten=example.replace(/[‘’]/g,"'");
  assert.throws(()=>new Function(rewritten),SyntaxError);
+});
+
+test('activity tracker is a fifth in-panel tab; native profile gets a compact summary',()=>{
+ const playerId='123';
+ const saved={
+  tt_combatActivityTargets:[{id:playerId,name:'Known target'}],
+  tt_combatActivityHistory_123:[{t:Date.now()-2*86400000,s:'Online'},{t:Date.now()-86400000,s:'Offline'}]
+ };
+ const {body,wrapper}=simulate(saved,true,{
+  pda:true,
+  pageHref:'https://www.torn.com/profiles.php?XID=123',
+  pdaGet:async()=>({status:200,responseText:JSON.stringify({profile:{name:'Known target',last_action:{status:'Online'}}})})
+ });
+ const panel=body.querySelector('#tc-root'),profile=body.querySelector('#tt-profile-activity');
+ assert.ok(panel,'Aurora panel must still exist');
+ assert.equal(panel.querySelectorAll('.tc-tab').length,5);
+ assert.ok(profile,'profile summary should appear on a player profile');
+ assert.equal(profile.parentElement,wrapper,'summary belongs inside Torn profile content');
+ assert.equal(profile.attrs['data-player-id'],'123');
+ assert.match(profile.textContent,/Usually online/);
+ assert.match(profile.textContent,/Usually offline/);
+ assert.match(profile.textContent,/observations/);
+ assert.equal(body.querySelector('#tc-pda-launcher'),null,'no new floating button');
+});
+
+test('profile activity Track button stores player and records real API observation',async()=>{
+ const saved={};
+ let calls=0;
+ const {body}=simulate(saved,true,{
+  pda:true,
+  pageHref:'https://www.torn.com/profiles.php?XID=456',
+  pdaGet:async (url)=>{
+   calls++;
+   if(url.includes('personalstats'))return {status:200,responseText:'{}'};
+   return {status:200,responseText:JSON.stringify({profile:{name:'Test target',last_action:{status:'Online'},status:{state:'Okay'}}})};
+  }
+ });
+ const profile=body.querySelector('#tt-profile-activity');
+ assert.ok(profile,'summary should be present even for a new player');
+ assert.match(profile.textContent,/Not tracking yet/);
+ const buttons=profile.querySelectorAll('button');
+ assert.equal(buttons.length,1);
+ buttons[0].events.click();
+ assert.equal(saved.tt_combatActivityTargets.length,1);
+ assert.equal(saved.tt_combatActivityTargets[0].id,'456');
+ await new Promise(resolve=>setImmediate(resolve));
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.ok(calls>=1,'Torn public profile API was requested');
+ assert.equal(saved.tt_combatActivityHistory_456.length,1,'an actual observation was recorded');
+ assert.match(profile.textContent,/Last observed: Online/);
+ assert.match(profile.textContent,/Full activity/);
+ assert.equal(body.querySelector('#tt-rebuild-error'),null);
+});
+
+test('activity profile summary follows player navigation and disappears off profile pages',()=>{
+ const saved={};
+ const {body,href,intervals}=simulate(saved,true,{
+  pda:true,
+  pageHref:'https://www.torn.com/profiles.php?XID=100',
+  pdaGet:async()=>({status:200,responseText:'{}'})
+ });
+ let widget=body.querySelector('#tt-profile-activity');
+ assert.equal(widget.attrs['data-player-id'],'100');
+ href.href='https://www.torn.com/profiles.php?XID=101';
+ intervals[0]();
+ widget=body.querySelector('#tt-profile-activity');
+ assert.ok(widget);
+ assert.equal(widget.attrs['data-player-id'],'101','never show the previously viewed player');
+ href.href='https://www.torn.com/index.php';
+ intervals[0]();
+ assert.equal(body.querySelector('#tt-profile-activity'),null,'remove summary on non-profile pages');
+});
+
+test('activity tracker does not extrapolate an online pattern from insufficient samples',()=>{
+ const saved={tt_combatActivityTargets:[{id:'123',name:'Known target'}]};
+ const {body}=simulate(saved,true,{pda:true});
+ const activityTab=body.querySelectorAll('.tc-tab').find(x=>x.textContent==='Activity');
+ assert.ok(activityTab);
+ activityTab.events.click();
+ const pane=body.querySelector('#tc-body');
+ assert.match(pane.textContent,/USUALLY ONLINE/);
+ assert.match(pane.textContent,/Not enough data yet/);
+ assert.match(pane.textContent,/Still learning/);
+ assert.equal(body.querySelector('#tt-rebuild-error'),null);
 });
