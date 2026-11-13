@@ -1,6 +1,12 @@
 # Torn Toolkit — Combat Edition
 
-Manual combat companion userscript for Torn, rebuilt cleanly in **v1.0.4** to prioritize Torn PDA on iPhone.
+Manual combat companion userscript for Torn, rebuilt cleanly in **v1.0.5** to prioritize Torn PDA on iPhone.
+
+## v1.0.5 — inline PDA panel, no bottom launcher
+
+After the v1.0.4 PDA parser repair, the extra floating **Torn Toolkit** button is no longer needed. The full original Aurora panel now mounts automatically inside the first visible Torn content container. If Torn PDA has hidden the desktop content wrapper, the script skips that wrapper and falls back to normal page flow directly below the page header. The built-in panel collapse control remains; there is no separate bottom launcher or drawer.
+
+Saved targets, solo chains, faction orders, styling, API requests, and the PDA smart-apostrophe parser fix are unchanged. Tests include PDA's exact source normalization, inline placement and hidden-wrapper fallback.
 
 ## v1.0.4 — verified Torn PDA parsing fix
 

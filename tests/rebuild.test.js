@@ -14,6 +14,7 @@ test('rebuild source parses and keeps the same appearance, data identifiers and 
  for(const name of ['Targets','Solo Chain','Faction Chain','War'])assert.ok(js.includes(name),name);
  assert.match(js,/@run-at\s+document-end/);
  assert.doesNotMatch(js,/module\.exports/);
+ assert.doesNotMatch(js,/tc-pda-launcher|ensureMobileLauncher|mobileDrawerOpen/);
 });
 class E{
  constructor(tag,txt=''){
@@ -37,12 +38,24 @@ class E{
  querySelectorAll(q){const all=[],pred=n=>q.startsWith('#')?n.attrs.id===q.slice(1):q.startsWith('.')?n.className.split(' ').includes(q.slice(1)):n.tagName===q;const walk=n=>{n.children.forEach(c=>{if(pred(c))all.push(c);walk(c)})};walk(this);return all}
  get isConnected(){return !!this.parentElement}
  get firstChild(){return this.children[0]||null}
+ get previousElementSibling(){
+  if(!this.parentElement)return null;
+  const a=this.parentElement.children,i=a.indexOf(this);
+  return i>0?a[i-1]:null;
+ }
+ insertAdjacentElement(position,node){
+  if(position!=='afterend'||!this.parentElement)throw Error('Invalid placement');
+  if(node.parentElement)node.parentElement.children=node.parentElement.children.filter(x=>x!==node);
+  const siblings=this.parentElement.children,index=siblings.indexOf(this);
+  siblings.splice(index+1,0,node);node.parentElement=this.parentElement;
+ }
 }
 class URLStub{constructor(){this.pathname='/index.php';this.searchParams={get:()=>null}}}
 function simulate(saved,withWrapper=false,options={}){
  const body=new E('body'),head=new E('head');
  const wrapper=new E('div');wrapper.className='content-wrapper';
  if(withWrapper){body.appendChild(new E('header'));body.appendChild(wrapper)}
+ if(options.hideWrapper)wrapper.hidden=true
  const doc={body,head,documentElement:new E('html'),readyState:'complete',
   createElement:x=>new E(x),createTextNode:x=>new E('#text',x),
   getElementById:id=>body.querySelector('#'+id)||head.querySelector('#'+id),
@@ -105,19 +118,24 @@ test('PDA uses native HTTP and never enters a status-triggered repaint loop',asy
  assert.ok(panel.querySelector('#tc-body').repaintCount<=3,'render must stabilize');
 });
 
-test('PDA launcher remains visible independently of Torn content wrapper and opens existing UI',()=>{
- const saved={};
- const {body,wrapper}=simulate(saved,true,{pda:true,pdaGet:async()=>({status:200,responseText:'{}'})});
- const panel=body.querySelector('#tc-root'),launcher=body.querySelector('#tc-pda-launcher');
- assert.ok(launcher,'native PDA should get an independent launcher');
- assert.equal(panel.parentElement,wrapper,'default panel placement remains in Torn content area');
- assert.match(launcher.style.cssText,/position:fixed!important/);
- launcher.events.click();
- assert.equal(panel.parentElement,body,'tap moves the same panel to visible page overlay');
- assert.match(panel.style.cssText,/position:fixed!important/);
- launcher.events.click();
- assert.equal(panel.parentElement,wrapper,'closing returns the panel to original content area');
- assert.equal(saved.tt_combatSoloChain,undefined,'opening launcher never overwrites saved chains');
+test('PDA mounts Aurora panel directly without a bottom launcher',()=>{
+ const {body,wrapper}=simulate({},true,{pda:true,pdaGet:async()=>({status:200,responseText:'{}'})});
+ const panel=body.querySelector('#tc-root');
+ assert.ok(panel,'PDA must build the panel automatically');
+ assert.equal(panel.parentElement,wrapper,'panel belongs inside the Torn content area');
+ assert.equal(body.querySelector('#tc-pda-launcher'),null,'no separate bottom button');
+ assert.ok(panel.textContent.includes('Torn Toolkit'),'original panel is visible');
+});
+
+test('hidden Torn wrappers are ignored and the panel stays under page header',()=>{
+ const {body,wrapper}=simulate({},true,{hideWrapper:true,pda:true,pdaGet:async()=>({status:200,responseText:'{}'})});
+ const panel=body.querySelector('#tc-root');
+ assert.ok(wrapper.hidden,'test must hide the Torn content wrapper');
+ assert.ok(panel,'panel mounts even when the first matching content wrapper is hidden');
+ assert.equal(panel.parentElement,body,'fallback stays within the document flow');
+ assert.equal(body.children[0].tagName,'header','website header remains first');
+ assert.equal(body.children[1],panel,'panel appears directly below header');
+ assert.equal(body.querySelector('#tc-pda-launcher'),null,'no launcher on fallback');
 });
 
 test('Torn PDA adaptSource normalization preserves full userscript JavaScript syntax',()=>{

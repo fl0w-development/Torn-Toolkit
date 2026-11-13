@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Toolkit — Combat Edition
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      1.0.4
+// @version      1.0.5
 // @description  Manual Torn combat companion. Clean PDA-compatible rebuild with original aurora UI.
 // @author       fl0w-development
 // @license      PolyForm-Strict-1.0.0
@@ -17,13 +17,10 @@
 // ==/UserScript==
 (function () {
 'use strict';
-var VERSION = '1.0.4';
+var VERSION = '1.0.5';
 var PDA_KEY = '###PDA-APIKEY###';
 var isPDA = PDA_KEY.indexOf('#') < 0;
 var root, body, tabs, counts;
-var mobileDrawerOpen=false;
-var mobileLauncher=null;
-function inPDA(){return isPDA || typeof PDA_httpGet==='function'}
 var state = {view:'watch',watchPage:0,chainPage:0,factionPage:0,warPage:0,warSide:'own',collapsed:false,target:null,player:null,
   factionId:'',memberId:'',leaderId:'',coLeaderId:'',editor:false,identityError:'',draft:null,shareCode:'',warOwn:'',warEnemy:'',warLeft:[],warRight:[],warLoaded:false};
 var cache = {};
@@ -618,57 +615,52 @@ function renderSettings(){
  body.append(h('label',{class:'tc-switch'},h('div',{},title('Aurora ambience'),txt('Aurora and twinkling stars')),check));
  body.append(txt('Issues? Message fl0ww_ [4605130] in Torn.'));
 }
-// PDA visibility rescue: the same Aurora panel, accessible independently of Torn's wrappers.
-function ensureMobileLauncher(){
- if(!inPDA()||mobileLauncher)return;
- var host=document.body||document.documentElement;if(!host)return;
- var launch=document.createElement('button');mobileLauncher=launch;
- launch.setAttribute('id','tc-pda-launcher');
- launch.type='button';
- launch.textContent='Torn Toolkit';
- launch.setAttribute('aria-label','Open Torn Toolkit');
- launch.style.cssText='position:fixed!important;right:12px!important;bottom:94px!important;z-index:2147483646!important;display:block!important;visibility:visible!important;opacity:1!important;background:#071e27!important;color:#b5fbe6!important;border:1px solid #5ce2b2!important;padding:11px 13px!important;border-radius:4px!important;font:600 13px Arial,sans-serif!important;box-shadow:0 6px 20px #0009!important';
- launch.addEventListener('click',function(){
-  if(!root)start();
-  if(!root)return;
-  mobileDrawerOpen=!mobileDrawerOpen;
-  if(mobileDrawerOpen){
-   document.body.appendChild(root);
-   root.style.cssText='position:fixed!important;top:72px!important;left:8px!important;right:8px!important;bottom:156px!important;z-index:2147483645!important;width:auto!important;max-width:none!important;max-height:none!important;overflow:auto!important;display:block!important;visibility:visible!important';
-   root.classList.remove('tc-collapsed');
-   launch.textContent='Close Toolkit';
-   launch.setAttribute('aria-label','Close Torn Toolkit');
-  }else{
-   root.style.cssText='';
-   root.classList.toggle('tc-collapsed',state.collapsed);
-   mount();
-   launch.textContent='Torn Toolkit';
-   launch.setAttribute('aria-label','Open Torn Toolkit');
+// Keep the panel in the page (never a floating PDA-only launcher).
+// PDA may retain hidden mobile/desktop containers in the same DOM, so
+// ignore any matched container hidden by a parent or responsive CSS.
+function visibleHost(node){
+ if(!node || (node.closest && node.closest('#tc-root')))return false;
+ for(var e=node;e && e!==document.body;e=e.parentElement){
+  if(e.hidden || (e.getAttribute && e.getAttribute('aria-hidden')==='true'))return false;
+  if(typeof window!=='undefined' && typeof window.getComputedStyle==='function'){
+   var style=window.getComputedStyle(e);
+   if(style && (style.display==='none'||style.visibility==='hidden'||style.visibility==='collapse'))return false;
   }
- });
- host.appendChild(launch);
+ }
+ return true;
 }
 function panelHost(){
- // Restore the placement from v0.7: inside Torn's content area,
- // not as the first element above the website.
- var selectors=['.content-wrapper','#mainContainer','#main-content','main','#content'];
+ var selectors=['.content-wrapper','#mainContainer','#main-content','main','#content','#app','[role="main"]'];
  for(var i=0;i<selectors.length;i++){
   var found=document.querySelector(selectors[i]);
-  if(found && !found.closest('#tc-root'))return found;
+  if(visibleHost(found))return found;
  }
  return document.body;
 }
 function mount(){
  var old=document.getElementById('tc-root');
  if(old && old!==root)return;
- var dest=panelHost();
- if(!dest)return;
- if(mobileDrawerOpen)return;
- if(root.parentElement!==dest)dest.prepend(root);
+ var dest=panelHost();if(!dest)return;
+ if(dest!==document.body){
+  if(root.parentElement!==dest)dest.prepend(root);
+  return;
+ }
+ // If Torn exposes no visible content wrapper, keep the Toolkit below
+ // its header in normal document flow rather than above the entire site.
+ var header=null;
+ var children=dest.children||[];
+ for(var i=0;i<children.length;i++){
+  var item=children[i];
+  if(item!==root && item.tagName && item.tagName.toLowerCase()==='header'){header=item;break}
+ }
+ if(header && typeof header.insertAdjacentElement==='function'){
+  if(root.previousElementSibling!==header)header.insertAdjacentElement('afterend',root);
+ }else if(root.parentElement!==dest){
+  dest.appendChild(root);
+ }
 }
 function start(){
  try{
-  ensureMobileLauncher();
   if(document.getElementById('tc-root'))return;
   var sheet=h('style',{id:'tc-style'},css);
   (document.head||document.documentElement).appendChild(sheet);
@@ -692,7 +684,7 @@ function start(){
   var prev=location.href;
   setInterval(()=>{
    if(location.href!==prev){prev=location.href;state.target=targetURL();if(state.view==='watch')render();}
-   if(!mobileDrawerOpen && (!root.isConnected || root.parentElement!==panelHost()))mount();
+   if(!root.isConnected || root.parentElement!==panelHost())mount();
   },1200);
   state.target=targetURL();if(state.target){
    Promise.all([api('user/'+state.target+'/profile'),api('user/'+state.target+'/personalstats?cat=popular')])
