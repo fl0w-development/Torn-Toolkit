@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Toolkit — Combat Edition
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      1.0.5
+// @version      1.0.6
 // @description  Manual Torn combat companion. Clean PDA-compatible rebuild with original aurora UI.
 // @author       fl0w-development
 // @license      PolyForm-Strict-1.0.0
@@ -17,16 +17,17 @@
 // ==/UserScript==
 (function () {
 'use strict';
-var VERSION = '1.0.5';
+var VERSION = '1.0.6';
 var PDA_KEY = '###PDA-APIKEY###';
 var isPDA = PDA_KEY.indexOf('#') < 0;
 var root, body, tabs, counts;
-var state = {view:'watch',watchPage:0,chainPage:0,factionPage:0,warPage:0,warSide:'own',collapsed:false,target:null,player:null,
+var state = {view:'watch',watchPage:0,activitySelected:'',chainPage:0,factionPage:0,warPage:0,warSide:'own',collapsed:false,target:null,player:null,
   factionId:'',memberId:'',leaderId:'',coLeaderId:'',editor:false,identityError:'',draft:null,shareCode:'',warOwn:'',warEnemy:'',warLeft:[],warRight:[],warLoaded:false};
 var cache = {};
 var busy = {};
 var status = {};
 var leader = null;
+var activityBusy=false,activityDue=0,activityIndex=0,activityError='';
 var ERR_ID = 'tt-rebuild-error';
 function warn(error,at) {
  try {
@@ -365,6 +366,7 @@ async function refreshStatus(ids,forced){
    var p=await api('user/'+id+'/profile');
    var obj=p.profile||p,stat=obj.status||{},stateText=String(stat.state||'Unknown'),desc=String(stat.description||'');
    status[id]={label:stateText+(desc && desc!==stateText?' · '+desc:''),time:Date.now()};
+   activityRecord(id,obj,Date.now());
   }catch(e){status[id]={error:String(e.message||e),time:Date.now()}}
   finally{busy[id]=false;updated=true}
  }
@@ -375,8 +377,95 @@ function switchTo(v){
  state.view=v;tabsRender();render();
  if(v==='faction'&&!leader)verifyFaction();
 }
+
+/* Activity samples are actual public API observations, never reconstructed logins. */
+var ACTIVITY_AGE=14*86400000,ACTIVITY_SPACING=12*60000;
+function activityList(){
+ var a=storageGet('combatActivityTargets',[]);
+ return (Array.isArray(a)?a:[]).filter(x=>x&&valid(x.id)).slice(0,10)
+  .map(x=>({id:idOf(x.id),name:String(x.name||'Player '+x.id).slice(0,60)}));
+}
+function activitySamples(id){
+ var a=storageGet('combatActivityHistory_'+id,[]);
+ return (Array.isArray(a)?a:[]).filter(x=>x&&Number.isFinite(x.t)&&x.t>=Date.now()-ACTIVITY_AGE
+  && ['Online','Idle','Offline'].includes(x.s)).slice(-700);
+}
+function activityAdd(id,name){
+ if(!valid(id))return 'Enter a valid Torn player ID';
+ id=idOf(id);
+ var a=activityList();if(a.some(x=>x.id===id)){state.activitySelected=id;return ''}
+ if(a.length>=10)return 'Maximum of 10 tracked players';
+ a.push({id:id,name:String(name||watch().find(x=>x.id===id)?.name||'Player '+id).slice(0,60)});
+ storageSet('combatActivityTargets',a);state.activitySelected=id;activityDue=0;return '';
+}
+function activityRemove(id){
+ storageSet('combatActivityTargets',activityList().filter(x=>x.id!==id));
+ storageDel('combatActivityHistory_'+id);
+ if(state.activitySelected===id)state.activitySelected='';
+}
+function activityRecord(id,profile,now){
+ var tracked=activityList(),item=tracked.find(x=>x.id===String(id));
+ if(!item)return false;
+ var raw=String(profile&&profile.last_action&&profile.last_action.status||'');
+ var stateName=['Online','Idle','Offline'].find(x=>x.toLowerCase()===raw.toLowerCase());
+ if(!stateName)return false;
+ now=now||Date.now();
+ var history=activitySamples(id),last=history[history.length-1];
+ if(last&&now-last.t<ACTIVITY_SPACING)return false;
+ history.push({t:now,s:stateName});
+ storageSet('combatActivityHistory_'+id,history.slice(-700));
+ if(profile.name&&item.name!==String(profile.name)){
+  item.name=String(profile.name).slice(0,60);
+  storageSet('combatActivityTargets',tracked);
+ }
+ return true;
+}
+function activityHour(hour){return (hour%12||12)+(hour<12?' AM':' PM')}
+function activityStats(samples){
+ var hours=Array.from({length:24},()=>({Online:0,Idle:0,Offline:0,total:0,days:{}})),days={};
+ samples.forEach(x=>{
+  var d=new Date(x.t),h=d.getHours(),day=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
+  var b=hours[h];b[x.s]++;b.total++;b.days[day]=true;days[day]=true;
+ });
+ function likely(status){
+  return hours.map((b,h)=>({hour:h,ratio:b.total?b[status]/b.total:0,n:b.total,days:Object.keys(b.days).length}))
+   .filter(x=>x.n>=3&&x.days>=2&&x.ratio>=.65).sort((a,b)=>b.ratio-a.ratio||b.n-a.n)
+   .slice(0,4).map(x=>x.hour);
+ }
+ return {hours:hours,days:Object.keys(days).length,count:samples.length,online:likely('Online'),offline:likely('Offline')};
+}
+async function activitySweep(force){
+ if(activityBusy||!key()||document.hidden===true)return;
+ var now=Date.now();
+ if(!force&&now<activityDue)return;
+ var all=activityList();activityDue=now+15*60000;
+ if(!all.length)return;
+ activityBusy=true;
+ var chosen=all.slice(activityIndex).concat(all.slice(0,activityIndex)).slice(0,5);
+ activityIndex=(activityIndex+chosen.length)%all.length;
+ try{
+  for(const target of chosen){
+   var samples=activitySamples(target.id),last=samples[samples.length-1];
+   if(last&&Date.now()-last.t<ACTIVITY_SPACING)continue;
+   try{
+    var response=await api('user/'+target.id+'/profile');
+    activityRecord(target.id,response.profile||response,Date.now());
+    activityError='';
+   }catch(e){
+    activityError=String(e&&e.message||e).slice(0,140);
+    if(/invalid|incorrect key|disabled|paused|HTTP 401|HTTP 403/i.test(activityError)){
+     activityDue=Date.now()+3600000;break;
+    }
+   }
+  }
+ }finally{
+  activityBusy=false;
+  if(state.view==='activity'&&root&&root.isConnected)render();
+ }
+}
+
 function tabsRender(){
- var views=[['watch','Targets'],['chain','Solo Chain'],['faction','Faction Chain'],['war','War']];
+ var views=[['watch','Targets'],['activity','Activity'],['chain','Solo Chain'],['faction','Faction Chain'],['war','War']];
  tabs.replaceChildren(...views.map(x=>h('button',{class:'tc-tab'+(state.view===x[0]?' selected':''),type:'button',onclick:()=>switchTo(x[0])},x[1])));
 }
 function render(){
@@ -385,6 +474,7 @@ function render(){
   counts.textContent=watch().length+' Targets · '+chain().length+' Queued';
   if(!key() && state.view!=='settings')body.append(notice('Add a Torn API key in Settings to load target conditions and rosters.'));
   if(state.view==='watch')renderWatch();
+  else if(state.view==='activity')renderActivity();
   else if(state.view==='chain')renderChain();
   else if(state.view==='faction')renderFaction();
   else if(state.view==='war')renderWar();
@@ -427,6 +517,7 @@ function renderWatch(){
    return card(row(grow(title(x.name+' ['+x.id+']'),statusNode(x.id),txt(x.group+(x.note?' · '+x.note:''))),
     h('div',{class:'tc-actions'},linkAttack(x.id),
      button('+ Chain',()=>{saveChain(chain().concat([x.id]));switchTo('chain')},true),
+      button('+ Track',()=>{var message=activityAdd(x.id,x.name);if(message){summary.textContent=message;return}switchTo('activity');void activitySweep(true)},true),
      button('Edit',()=>{edit.hidden=!edit.hidden},true),
      button('Remove',()=>{saveWatch(watch().filter(t=>t.id!==x.id));render()},true))),edit);
   }));
@@ -685,6 +776,7 @@ function start(){
   setInterval(()=>{
    if(location.href!==prev){prev=location.href;state.target=targetURL();if(state.view==='watch')render();}
    if(!root.isConnected || root.parentElement!==panelHost())mount();
+   if(Date.now()>=activityDue)void activitySweep(false);
   },1200);
   state.target=targetURL();if(state.target){
    Promise.all([api('user/'+state.target+'/profile'),api('user/'+state.target+'/personalstats?cat=popular')])
