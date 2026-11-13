@@ -1,24 +1,24 @@
 // ==UserScript==
 // @name         Torn Toolkit — Combat Edition
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      0.8.3
+// @version      0.8.4
 // @description  Manual target watchlists, solo chain lists, faction chain orders, war rosters and enemy activity. No gameplay automation.
 // @author       fl0w-development
 // @copyright    Copyright (c) 2026 fl0w-development
 // @license      PolyForm-Strict-1.0.0
-// @match        https://www.torn.com/*
-// @match        https://torn.com/*
+// @match        *://www.torn.com/*
+// @match        *://torn.com/*
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_deleteValue
 // @connect      api.torn.com
-// @run-at       document-idle
+// @run-at       document-end
 // @downloadURL  https://raw.githubusercontent.com/fl0w-development/Torn-Toolkit/main/torn-toolkit.user.js
 // @updateURL    https://raw.githubusercontent.com/fl0w-development/Torn-Toolkit/main/torn-toolkit.user.js
 // ==/UserScript==
 (function(){
 'use strict';
-const VER='0.8.3',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
+const VER='0.8.4',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
 // CRASH-REPORT-START
 // If anything fails while starting, show a small bar with the reason instead of failing silently.
 function tcReportCrash(e,where){
@@ -36,6 +36,7 @@ function tcReportCrash(e,where){
 // CRASH-REPORT-END
 try{
 const isPda=!PDA.includes('#');
+const pdaRuntime=isPda||typeof PDA_httpGet==='function'||typeof PDA_storage!=='undefined';
 // STORE-START
 // Use the userscript manager's storage only when it answers right away. Some phone apps
 // return nothing for unsaved keys or hand back promises, so reads always fall back safely.
@@ -261,6 +262,12 @@ const css=[
  " #tc-root.tc-docked.tc-collapsed{width:min(270px,calc(100vw - 16px))!important}",
  " #tc-root.tc-docked .tc-body{max-height:min(365px,calc(100vh - 142px))}",
  "}",
+  /* Torn PDA WebView has its own lower browser controls. Keep launcher high and tappable. */
+ "#tc-root.tc-docked.tc-pda{top:max(72px,env(safe-area-inset-top))!important;",
+ " bottom:auto!important;right:8px!important;",
+ " width:min(660px,calc(100vw - 16px))!important;max-height:calc(100dvh - 90px)!important}",
+ "#tc-root.tc-docked.tc-pda.tc-collapsed{width:min(258px,calc(100vw - 16px))!important}",
+ "#tc-root.tc-docked.tc-pda .tc-body{max-height:min(365px,calc(100dvh - 185px))}",
   "#tc-root::before,#tc-root::after{",
  " content:\"\";position:absolute;z-index:0;pointer-events:none;will-change:transform",
  "}",
@@ -464,6 +471,22 @@ const css=[
 ].join('');
 const state={view:'watch',lastView:'watch',watchPage:0,chainPage:0,factionPage:0,rosterPage:0,rosterSide:'own',rosterQuery:'',collapsed:store.get('combatCollapsed',true)===true,target:null,player:null,playerError:'',own:(store.get('combatWarFactions',{})||{}).own||'',enemy:(store.get('combatWarFactions',{})||{}).enemy||'',left:null,right:null,warError:'',loading:false,actPage:0};
 const apiCache=new Map(),inflight=new Map(),requests=[];
+async function tornGetJson(endpoint,apiKey){
+ const headers={Authorization:'ApiKey '+apiKey};
+ // PDA supplies a native cross-origin HTTP bridge. Prefer it to WebView fetch
+ // when available; desktop userscript managers keep their existing fetch path.
+ if(typeof PDA_httpGet==='function'){
+  const response=await PDA_httpGet(endpoint,headers);
+  const status=Number(response&&response.status);
+  if(!Number.isInteger(status)||status<200||status>=300)
+   throw Error('Torn API HTTP '+(status||'unknown'));
+  try{return JSON.parse(String(response.responseText||''))}
+  catch(_){throw Error('Torn PDA returned an invalid API response')}
+ }
+ const response=await fetch(endpoint,{headers});
+ if(!response.ok)throw Error('Torn API HTTP '+response.status);
+ return response.json();
+}
 async function api(path,params={},ttl=300){
  if(!key())throw Error('Add an API key in Settings');
  const q=new URLSearchParams(params),ident=path+'?'+q.toString(),cached=apiCache.get(ident);
@@ -473,9 +496,8 @@ async function api(path,params={},ttl=300){
  if(requests.length>=25)throw Error('API rate limit safeguard: try again shortly');
  requests.push(now);q.set('comment','TornToolkit');
  const pending=(async()=>{
-  const r=await fetch(API+path+'?'+q.toString(),{headers:{Authorization:'ApiKey '+key()}});
-  if(!r.ok)throw Error('Torn API HTTP '+r.status);
-  const v=await r.json();if(v.error)throw Error('Torn API: '+String(v.error.error||v.error.code));
+  const v=await tornGetJson(API+path+'?'+q.toString(),key());
+  if(v.error)throw Error('Torn API: '+String(v.error.error||v.error.code));
   apiCache.set(ident,{t:Date.now(),v});return v;
  })();
  inflight.set(ident,pending);try{return await pending}finally{inflight.delete(ident)}
@@ -663,9 +685,8 @@ function renderSettings(){
    if(k){
     message.textContent='Verifying…';
     try{
-     const r=await fetch(API+'key/info?comment=TornToolkit',{headers:{Authorization:'ApiKey '+k}});
-     const d=await r.json();
-     if(!r.ok||d.error)throw Error(d.error&&d.error.error||'Verification failed');
+     const d=await tornGetJson(API+'key/info?comment=TornToolkit',k);
+     if(d.error)throw Error(d.error.error||'Verification failed');
     }catch(e){message.textContent=String(e.message);return}
     store.set('apiKey',k);
    }else store.del('apiKey');
@@ -1102,7 +1123,7 @@ function boot(){
  collapseBtn.classList.add('tc-toggle');
  collapseBtn.setAttribute('aria-controls','tc-tabs tc-body');
  headCounts=h('span',{class:'tc-count'},'');
- root=h('section',{id:'tc-root',class:'tc-docked','aria-label':'Torn Toolkit Combat Edition'},
+ root=h('section',{id:'tc-root',class:'tc-docked'+(pdaRuntime?' tc-pda':''),'aria-label':'Torn Toolkit Combat Edition'},
   h('div',{class:'tc-stars','aria-hidden':'true'}),
   h('div',{class:'tc-head'},
    h('div',{class:'tc-brandlock'},
@@ -1125,8 +1146,19 @@ function boot(){
  void actPoll(false);setInterval(()=>{void actPoll(false)},60000);
 }
 function safeBoot(){try{boot()}catch(e){tcReportCrash(e,'startup')}}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',safeBoot,{once:true});
-else safeBoot();
+let bootAttempts=0,bootTimer=null;
+function bootWhenReady(){
+ if(document.getElementById('tc-root'))return;
+ if(document.body&&document.head){safeBoot();return}
+ if(++bootAttempts>=24){tcReportCrash(new Error('Torn page document never became ready'),'startup');return}
+ if(bootTimer===null)bootTimer=setInterval(()=>{
+  if(document.body&&document.head){clearInterval(bootTimer);bootTimer=null;safeBoot()}
+  else if(++bootAttempts>=24){clearInterval(bootTimer);bootTimer=null;
+   tcReportCrash(new Error('Torn page document never became ready'),'startup')}
+ },250);
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bootWhenReady,{once:true});
+bootWhenReady();
 }catch(e){
  const show=()=>tcReportCrash(e,'loading');
  if(document.body)show();else document.addEventListener('DOMContentLoaded',show,{once:true});

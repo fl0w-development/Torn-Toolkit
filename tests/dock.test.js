@@ -20,6 +20,6 @@ test('dock remains visible and usable when collapsed',()=>{
 });
 test('dock remains compact and supports both Torn hostnames',()=>{
  assert.match(script,/max-height:min\(406px,calc\(100vh - 145px\)\)/);
- assert.match(script,/@match\s+https:\/\/www\.torn\.com\/\*/);
- assert.match(script,/@match\s+https:\/\/torn\.com\/\*/);
+ assert.match(script,/@match\s+\*:\/\/www\.torn\.com\/\*/);
+ assert.match(script,/@match\s+\*:\/\/torn\.com\/\*/);
 });
