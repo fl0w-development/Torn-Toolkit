@@ -119,3 +119,19 @@ test('PDA launcher remains visible independently of Torn content wrapper and ope
  assert.equal(panel.parentElement,wrapper,'closing returns the panel to original content area');
  assert.equal(saved.tt_combatSoloChain,undefined,'opening launcher never overwrites saved chains');
 });
+
+test('Torn PDA adaptSource normalization preserves full userscript JavaScript syntax',()=>{
+ // Exact source rewriting performed by Torn PDA's UserScriptsProvider.adaptSource:
+ // replace the API key token, wrap in a namespace with PDA_storage,
+ // then normalize curly quotes to straight ASCII quote characters.
+ const withKey=js.replaceAll('###PDA-APIKEY###','0123456789abcdef');
+ const wrapped='(function(){const PDA_storage = undefined;'+withKey+'}());';
+ const normalized=wrapped.replace(/[“”]/g,'"').replace(/[‘’]/g,"'");
+ assert.doesNotThrow(()=>new Function(normalized),'the exact PDA-transformed script must compile');
+ assert.doesNotMatch(js,/[‘’“”]/,'never ship curly quotes that PDA can rewrite inside JS strings');
+});
+test('reproduces the old PDA parser failure caused by a curly apostrophe',()=>{
+ const example="const message = 'Load leader’s order';";
+ const rewritten=example.replace(/[‘’]/g,"'");
+ assert.throws(()=>new Function(rewritten),SyntaxError);
+});
