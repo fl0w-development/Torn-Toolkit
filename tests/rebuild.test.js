@@ -22,12 +22,12 @@ class E{
  get textContent(){return this._t+this.children.map(x=>x.textContent).join('')}
  setAttribute(k,v){this.attrs[k]=v}
  addEventListener(k,fn){this.events[k]=fn}
- appendChild(n){n.parentElement=this;this.children.push(n);return n}
+ appendChild(n){n.parentElement=this;this.children.push(n);if(this.tagName==='select' && n.tagName==='option' && this.children.length===1)this.value=n.attrs.value||n.textContent;return n}
  append(){Array.from(arguments).forEach(n=>this.appendChild(n))}
  insertBefore(n,sibling){n.parentElement=this;this.children.unshift(n)}
  replaceChildren(){this.children=[];Array.from(arguments).forEach(n=>{if(n instanceof E)this.appendChild(n)})}
  querySelector(q){const target=q.replace('#','');return this.querySelectorAll(q)[0]||null}
- querySelectorAll(q){const all=[],pred=n=>q.startsWith('#')?n.attrs.id===q.slice(1):q.startsWith('.')?n.className.includes(q.slice(1)):n.tagName===q;const walk=n=>{n.children.forEach(c=>{if(pred(c))all.push(c);walk(c)})};walk(this);return all}
+ querySelectorAll(q){const all=[],pred=n=>q.startsWith('#')?n.attrs.id===q.slice(1):q.startsWith('.')?n.className.split(' ').includes(q.slice(1)):n.tagName===q;const walk=n=>{n.children.forEach(c=>{if(pred(c))all.push(c);walk(c)})};walk(this);return all}
  get isConnected(){return !!this.parentElement}
  get firstChild(){return this.children[0]||null}
 }
