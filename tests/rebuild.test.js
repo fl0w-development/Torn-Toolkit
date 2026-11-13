@@ -3,7 +3,9 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
-const js=fs.readFileSync(path.join(__dirname,'..','torn-toolkit.rebuilt.user.js'),'utf8');
+const js=fs.readFileSync(path.join(__dirname,'..','torn-toolkit.user.js'),'utf8');
+const staged=fs.readFileSync(path.join(__dirname,'..','torn-toolkit.rebuilt.user.js'),'utf8');
+test('promoted userscript is identical to staged clean rebuild',()=>assert.equal(js,staged));
 test('rebuild source parses and keeps the same appearance, data identifiers and tabs',()=>{
  assert.doesNotThrow(()=>new Function(js));
  assert.match(js,/tc-aurora-drift/);
