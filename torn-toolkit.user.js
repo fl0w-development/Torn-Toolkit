@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Toolkit — Combat Edition
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      1.0.1
+// @version      1.0.2
 // @description  Manual Torn combat companion. Clean PDA-compatible rebuild with original aurora UI.
 // @author       fl0w-development
 // @license      PolyForm-Strict-1.0.0
@@ -17,7 +17,7 @@
 // ==/UserScript==
 (function () {
 'use strict';
-var VERSION = '1.0.1';
+var VERSION = '1.0.2';
 var PDA_KEY = '###PDA-APIKEY###';
 var isPDA = PDA_KEY.indexOf('#') < 0;
 var root, body, tabs, counts;
@@ -333,11 +333,19 @@ async function api(path){
  if(!key())throw Error('Add an API key in Settings');
  var now=Date.now(),existing=cache[path];
  if(existing && now-existing.time<90000)return existing.value;
- var resp=await fetch('https://api.torn.com/v2/'+path+(path.includes('?')?'&':'?')+'comment=TornToolkit',{
-  headers:{Authorization:'ApiKey '+key()}
- });
- if(!resp.ok)throw Error('Torn API HTTP '+resp.status);
- var value=await resp.json();
+ var endpoint='https://api.torn.com/v2/'+path+(path.includes('?')?'&':'?')+'comment=TornToolkit';
+ var headers={Authorization:'ApiKey '+key()},value;
+ // PDA's documented native bridge avoids cross-origin browser fetch restrictions.
+ if(isPDA && typeof PDA_httpGet==='function'){
+  var response=await PDA_httpGet(endpoint,headers);
+  var statusCode=Number(response && response.status);
+  if(statusCode<200 || statusCode>=300)throw Error('Torn API HTTP '+statusCode);
+  value=JSON.parse(response.responseText);
+ }else{
+  var resp=await fetch(endpoint,{headers:headers});
+  if(!resp.ok)throw Error('Torn API HTTP '+resp.status);
+  value=await resp.json();
+ }
  if(value.error)throw Error(String(value.error.error||value.error.code||'Torn API error'));
  cache[path]={time:now,value:value};return value;
 }
@@ -347,6 +355,7 @@ function statusNode(id){
 }
 async function refreshStatus(ids,forced){
  if(!key())return;
+ var updated=false;
  for(const id of ids.slice(0,5)){
   var current=status[id];
   if(current && !forced && Date.now()-current.time<90000)continue;
@@ -357,9 +366,10 @@ async function refreshStatus(ids,forced){
    var obj=p.profile||p,stat=obj.status||{},stateText=String(stat.state||'Unknown'),desc=String(stat.description||'');
    status[id]={label:stateText+(desc && desc!==stateText?' · '+desc:''),time:Date.now()};
   }catch(e){status[id]={error:String(e.message||e),time:Date.now()}}
-  finally{busy[id]=false}
+  finally{busy[id]=false;updated=true}
  }
- if(root && state.view!=='settings') render();
+ // Do not recursively repaint on a cached or already-busy status pass.
+ if(updated && root && state.view!=='settings') render();
 }
 function switchTo(v){
  state.view=v;tabsRender();render();
