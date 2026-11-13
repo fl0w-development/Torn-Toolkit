@@ -29,14 +29,17 @@ class E{
  prepend(){Array.from(arguments).reverse().forEach(n=>{n.parentElement=this;this.children.unshift(n)})}
  closest(query){return null}
  insertBefore(n,sibling){n.parentElement=this;this.children.unshift(n)}
- replaceChildren(){this.children=[];Array.from(arguments).forEach(n=>{if(n instanceof E)this.appendChild(n)})}
+ replaceChildren(){
+  if(this.attrs.id==='tc-body'){this.repaintCount=(this.repaintCount||0)+1;if(this.repaintCount>15)throw Error('Unbounded status render loop')}
+  this.children=[];Array.from(arguments).forEach(n=>{if(n instanceof E)this.appendChild(n)})
+ }
  querySelector(q){const target=q.replace('#','');return this.querySelectorAll(q)[0]||null}
  querySelectorAll(q){const all=[],pred=n=>q.startsWith('#')?n.attrs.id===q.slice(1):q.startsWith('.')?n.className.split(' ').includes(q.slice(1)):n.tagName===q;const walk=n=>{n.children.forEach(c=>{if(pred(c))all.push(c);walk(c)})};walk(this);return all}
  get isConnected(){return !!this.parentElement}
  get firstChild(){return this.children[0]||null}
 }
 class URLStub{constructor(){this.pathname='/index.php';this.searchParams={get:()=>null}}}
-function simulate(saved,withWrapper=false){
+function simulate(saved,withWrapper=false,options={}){
  const body=new E('body'),head=new E('head');
  const wrapper=new E('div');wrapper.className='content-wrapper';
  if(withWrapper){body.appendChild(new E('header'));body.appendChild(wrapper)}
@@ -46,8 +49,9 @@ function simulate(saved,withWrapper=false){
   querySelector:q=>q==='.content-wrapper'&&withWrapper?wrapper:null,
   addEventListener:()=>{}};
  const localStorage={getItem:key=>Object.hasOwn(saved,key)?JSON.stringify(saved[key]):null,setItem:(k,v)=>{saved[k]=JSON.parse(v)},removeItem:k=>delete saved[k]};
- new Function('document','Node','URL','location','localStorage','GM_getValue','GM_setValue','GM_deleteValue','setInterval','setTimeout',js)(
-  doc,E,URLStub,{href:'https://www.torn.com/index.php'},localStorage,undefined,undefined,undefined,()=>0,()=>0
+ const executable=options.pda?js.replace('###PDA-APIKEY###','example1234567890'):js;
+ new Function('document','Node','URL','location','localStorage','GM_getValue','GM_setValue','GM_deleteValue','setInterval','setTimeout','PDA_httpGet','fetch',executable)(
+  doc,E,URLStub,{href:'https://www.torn.com/index.php'},localStorage,undefined,undefined,undefined,()=>0,()=>0,options.pdaGet,options.fetch
  );
  return {body,doc,wrapper};
 }
@@ -74,4 +78,29 @@ test('restores original panel position inside Torn content wrapper (not before s
  assert.equal(panel.parentElement,wrapper,'Toolkit must be mounted into original content wrapper');
  assert.equal(body.children[0].tagName,'header','Torn website header should remain first');
  assert.equal(wrapper.children[0],panel,'Toolkit should lead content without preceding entire page');
+});
+
+test('PDA uses native HTTP and never enters a status-triggered repaint loop',async()=>{
+ const saved={tt_combatWatchlist:[{id:'123',name:'Known target',group:'Rival',note:''}],tt_combatSoloChain:['123']};
+ let calls=0;
+ const {body}=simulate(saved,false,{
+  pda:true,
+  pdaGet:async (url,headers)=>{
+   calls++;
+   assert.match(url,/api\.torn\.com\/v2\/user\/123\/profile/);
+   assert.match(headers.Authorization,/^ApiKey /);
+   return {status:200,responseText:JSON.stringify({profile:{status:{state:'Okay'}}})};
+  },
+  fetch:()=>{throw Error('PDA must use native bridge, not browser fetch')}
+ });
+ const panel=body.querySelector('#tc-root');
+ assert.ok(panel,'panel must mount before activity request');
+ // Flush native-bridge promises and one status update; a recursive repaint
+ // would hit the fake DOM's finite repaint guard and display an error.
+ await new Promise(resolve=>setImmediate(resolve));
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(calls,1,'cached status must not trigger new HTTP calls');
+ assert.ok(panel.textContent.includes('Okay'),'status should update after native bridge resolves');
+ assert.equal(body.querySelector('#tt-rebuild-error'),null,'no repaint-loop crash banner');
+ assert.ok(panel.querySelector('#tc-body').repaintCount<=3,'render must stabilize');
 });
