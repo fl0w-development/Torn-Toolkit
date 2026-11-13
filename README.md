@@ -2,7 +2,18 @@
 
 combat userscript for torn. target watchlist, solo chain list, faction chain orders and war rosters, all in one panel with an aurora background. everything is manual, it never attacks or does anything for you.
 
-current version: 0.8.2
+current version: 0.8.3
+
+## panel visibility
+
+the panel is now a fixed dock in the bottom-right corner, rather than being inserted into Torn's content containers. those containers sometimes hide or get replaced, which could make the toolkit disappear.
+
+- collapsed: small Torn Toolkit header with an expand arrow
+- expanded: the same aurora interface with its own internal scroll
+- works on different Torn pages without pushing the rest of the page down
+- keeps existing saved watchlists, chain orders, API key and collapse setting
+
+if the panel still doesn't appear, confirm the script is enabled and allowed to run on Torn in your userscript manager. the script also shows a red error strip if its startup fails.
 
 ## install
 
