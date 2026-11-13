@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Torn Toolkit — Combat Edition
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      0.8.6
+// @version      0.8.7
 // @description  Manual target watchlists, solo chain lists and read-only faction rosters. No gameplay automation.
 // @author       fl0w-development
 // @copyright    Copyright (c) 2026 fl0w-development
@@ -17,7 +17,7 @@
 // ==/UserScript==
 (function(){
 'use strict';
-const VER='0.8.6',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
+const VER='0.8.7',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
 const isPda=!PDA.includes('#'),hasGM=typeof GM_getValue==='function'&&typeof GM_setValue==='function';
 // BOOT-DIAGNOSTIC-START
 // Pure DOM diagnostic: never reads, changes or deletes user storage.
@@ -126,7 +126,9 @@ function decodeFactionOrder(raw){
  return {factionId:norm(parts[1]),authorId:norm(parts[2]),createdAt:Number(parts[3]),entries:ids.map(norm)};
 }
 const pure={good,norm,url,number,estimate,members,move,removeHitAt,availability,parseStatus,pageSlice,encodeFactionOrder,decodeFactionOrder};
-if(typeof module!=='undefined'&&module.exports){module.exports=pure;return}
+// Only bypass the browser UI when running Node's pure-function tests.
+// A web page or injected runtime can expose a global `module` object.
+if(typeof document==='undefined'&&typeof module!=='undefined'&&module.exports){module.exports=pure;return}
 function h(tag,attrs={},...kids){
  const n=document.createElement(tag);
  Object.entries(attrs).forEach(([k,v])=>{

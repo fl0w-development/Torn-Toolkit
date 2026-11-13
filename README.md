@@ -2,7 +2,13 @@
 
 combat userscript for torn. target watchlist, solo chain list, faction chain orders and war rosters, all in one panel with an aurora background. everything is manual, it never attacks or does anything for you.
 
-current version: 0.8.6
+current version: 0.8.7
+
+## Browser startup compatibility — v0.8.7
+
+The built-in test-export guard previously returned from the entire userscript whenever a page exposed `module.exports`. This is unsafe in an injected browser context because third-party scripts or the page can create a global `module` variable. The guard now exports pure helpers and exits **only when there is no browser document** (the Node test environment).
+
+A simulated browser startup test confirms the panel mounts both when a `module.exports` object is present and absent. This fix does not claim to explain Torn PDA's unlocated `SyntaxError: Unexpected identifier 's'` message. The separate, proven PDA injection probe remains available at `diagnostics/pda-injection-probe.user.js`.
 
 ## PDA startup diagnostics — v0.8.6
 
