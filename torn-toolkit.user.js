@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         Torn Toolkit — Combat Edition
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      0.8.2
+// @version      0.8.3
 // @description  Manual target watchlists, solo chain lists, faction chain orders, war rosters and enemy activity. No gameplay automation.
 // @author       fl0w-development
 // @copyright    Copyright (c) 2026 fl0w-development
 // @license      PolyForm-Strict-1.0.0
 // @match        https://www.torn.com/*
+// @match        https://torn.com/*
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_deleteValue
@@ -17,7 +18,7 @@
 // ==/UserScript==
 (function(){
 'use strict';
-const VER='0.8.2',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
+const VER='0.8.3',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
 // CRASH-REPORT-START
 // If anything fails while starting, show a small bar with the reason instead of failing silently.
 function tcReportCrash(e,where){
@@ -246,7 +247,21 @@ const css=[
  " background-color:#060a13;color:var(--tc-ink);font:12.5px/1.45 system-ui,-apple-system,\"Segoe UI\",Roboto,Arial,sans-serif;",
  /* a faint, fixed star field under the aurora */
  "}",
- "#tc-root::before,#tc-root::after{",
+ /* Keep the panel out of Torn's hidden/replaced content sections. */
+ "#tc-root.tc-docked{position:fixed!important;top:auto!important;left:auto!important;",
+ " right:max(10px,env(safe-area-inset-right))!important;bottom:max(10px,env(safe-area-inset-bottom))!important;",
+ " z-index:2147483000!important;width:min(660px,calc(100vw - 20px))!important;",
+ " max-height:calc(100vh - 20px)!important;margin:0!important;display:block!important;",
+ " visibility:visible!important;opacity:1!important;transform:none!important}",
+ "#tc-root.tc-docked.tc-collapsed{width:min(310px,calc(100vw - 20px))!important}",
+ "#tc-root.tc-docked .tc-body{max-height:min(406px,calc(100vh - 145px));overscroll-behavior:contain}",
+ "@media(max-width:570px){",
+ " #tc-root.tc-docked{right:8px!important;bottom:max(8px,env(safe-area-inset-bottom))!important;",
+ " width:calc(100vw - 16px)!important}",
+ " #tc-root.tc-docked.tc-collapsed{width:min(270px,calc(100vw - 16px))!important}",
+ " #tc-root.tc-docked .tc-body{max-height:min(365px,calc(100vh - 142px))}",
+ "}",
+  "#tc-root::before,#tc-root::after{",
  " content:\"\";position:absolute;z-index:0;pointer-events:none;will-change:transform",
  "}",
  "#tc-root::before{",
@@ -622,15 +637,14 @@ function targetFromUrl(){
  return good(id)?norm(id):null;
 }
 function host(){
- // Use the first matching container that is actually visible; Torn pages can contain hidden copies.
- for(const selector of ['.content-wrapper','#mainContainer','#main-content','main','#content']){
-  for(const found of document.querySelectorAll(selector)){
-   if(!found.closest('#tc-root')&&found.getClientRects().length)return found;
-  }
- }
- return document.body;
+ // Torn can hide or replace its content containers. A persistent dock should
+ // always be attached directly to BODY, not inside one of those containers.
+ return document.body||document.documentElement;
 }
-function mount(){const dest=host();if(root.parentElement!==dest)dest.prepend(root)}
+function mount(){
+ const dest=host();
+ if(dest&&root.parentElement!==dest)dest.append(root);
+}
 function showSettings(){
  state.view=state.view==='settings'?(state.lastView||'watch'):'settings';
  renderTabs();render();body.scrollTop=0;
@@ -1088,7 +1102,7 @@ function boot(){
  collapseBtn.classList.add('tc-toggle');
  collapseBtn.setAttribute('aria-controls','tc-tabs tc-body');
  headCounts=h('span',{class:'tc-count'},'');
- root=h('section',{id:'tc-root','aria-label':'Torn Toolkit Combat Edition'},
+ root=h('section',{id:'tc-root',class:'tc-docked','aria-label':'Torn Toolkit Combat Edition'},
   h('div',{class:'tc-stars','aria-hidden':'true'}),
   h('div',{class:'tc-head'},
    h('div',{class:'tc-brandlock'},
