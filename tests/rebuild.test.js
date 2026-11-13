@@ -18,7 +18,7 @@ test('rebuild source parses and keeps the same appearance, data identifiers and 
 class E{
  constructor(tag,txt=''){
   this.tagName=tag;this.children=[];this.parentElement=null;this._t=String(txt);this.className='';this.attrs={};this.style={cssText:''};this.events={};this.value='';this.hidden=false;this.checked=false;
-  this.classList={toggle:(name,on)=>{if(on)this.className+=' '+name}};
+  this.classList={toggle:(name,on)=>{if(on && !this.className.split(' ').includes(name))this.className+=' '+name;else if(!on)this.className=this.className.split(' ').filter(x=>x!==name).join(' ')},remove:name=>{this.className=this.className.split(' ').filter(x=>x!==name).join(' ')}};
  }
  set textContent(x){this._t=String(x);this.children=[]}
  get textContent(){return this._t+this.children.map(x=>x.textContent).join('')}
@@ -103,4 +103,19 @@ test('PDA uses native HTTP and never enters a status-triggered repaint loop',asy
  assert.ok(panel.textContent.includes('Okay'),'status should update after native bridge resolves');
  assert.equal(body.querySelector('#tt-rebuild-error'),null,'no repaint-loop crash banner');
  assert.ok(panel.querySelector('#tc-body').repaintCount<=3,'render must stabilize');
+});
+
+test('PDA launcher remains visible independently of Torn content wrapper and opens existing UI',()=>{
+ const saved={};
+ const {body,wrapper}=simulate(saved,true,{pda:true,pdaGet:async()=>({status:200,responseText:'{}'})});
+ const panel=body.querySelector('#tc-root'),launcher=body.querySelector('#tc-pda-launcher');
+ assert.ok(launcher,'native PDA should get an independent launcher');
+ assert.equal(panel.parentElement,wrapper,'default panel placement remains in Torn content area');
+ assert.match(launcher.style.cssText,/position:fixed!important/);
+ launcher.events.click();
+ assert.equal(panel.parentElement,body,'tap moves the same panel to visible page overlay');
+ assert.match(panel.style.cssText,/position:fixed!important/);
+ launcher.events.click();
+ assert.equal(panel.parentElement,wrapper,'closing returns the panel to original content area');
+ assert.equal(saved.tt_combatSoloChain,undefined,'opening launcher never overwrites saved chains');
 });
