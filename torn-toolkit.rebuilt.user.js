@@ -28,6 +28,7 @@ var busy = {};
 var status = {};
 var leader = null;
 var activityBusy=false,activityDue=0,activityIndex=0,activityError='';
+var factionActivityBusy=false,factionActivityDue=0,factionActivityError='',factionActivityRoster=[];
 var ERR_ID = 'tt-rebuild-error';
 function warn(error,at) {
  try {
@@ -218,6 +219,9 @@ const css=[
  "#tc-root .tc-activity-mixed{background:rgba(128,147,245,.12)}",
  "#tc-root .tc-activity-label{font:10px var(--tc-mono);white-space:nowrap;color:var(--tc-ink)}",
  "#tc-root .tc-activity-value{font:11px var(--tc-mono);color:var(--tc-muted)}",
+ "#tc-root .tc-faction-active{display:flex;flex-wrap:wrap;gap:6px 12px;margin:8px 0}",
+ "#tc-root .tc-faction-active a{color:#9cf2ce;text-decoration:none;font:12px system-ui}",
+ "#tc-root .tc-faction-active a:hover{text-decoration:underline}",
  "#tt-profile-activity{box-sizing:border-box;max-width:660px;width:100%;margin:12px 0 16px;padding:14px 16px;border:1px solid rgba(142,240,200,.26);border-radius:4px;background:linear-gradient(115deg,#081c24,#0d1223 70%,#160f2b);color:#e8ecf2;font:12.5px/1.5 system-ui,-apple-system,Arial,sans-serif}",
  "#tt-profile-activity .tt-pa-heading{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:9px}",
  "#tt-profile-activity .tt-pa-heading .tc-title{font:italic 400 19px/1.25 Georgia,serif}",
@@ -547,6 +551,151 @@ function mountProfileActivity(){
  }
 }
 
+
+/* One public faction roster response gives activity status for every member.
+   Store one compact aggregate per sweep; no large member-by-member log. */
+var FACTION_ACTIVITY_MAX=14*24*4;
+function factionActivityId(){
+ var id=storageGet('combatActivityFactionId','');
+ return valid(id)?idOf(id):'';
+}
+function factionActivityHistory(id){
+ var all=storageGet('combatActivityFactionHistory_'+id,[]);
+ var cutoff=Date.now()-14*86400000;
+ return (Array.isArray(all)?all:[])
+  .filter(x=>x&&Number.isFinite(x.t)&&x.t>=cutoff
+    && Number.isInteger(x.online)&&Number.isInteger(x.offline)
+    && Number.isInteger(x.idle)&&Number.isInteger(x.total)&&x.total>0
+    && x.online>=0&&x.offline>=0&&x.idle>=0
+    && x.online+x.offline+x.idle<=x.total)
+  .slice(-FACTION_ACTIVITY_MAX);
+}
+function factionActivityMembers(response){
+ var members=response&&response.members;
+ if(!members)return [];
+ var items=Array.isArray(members)?members:Object.keys(members).map(id=>Object.assign({id:id},members[id]));
+ return items.filter(x=>x&&valid(x.id)).map(x=>({
+  id:idOf(x.id),name:String(x.name||'Player '+x.id).slice(0,60),
+  status:String(x.last_action&&x.last_action.status||'Unknown')
+ }));
+}
+function factionActivityRecord(id,response,now){
+ if(factionActivityId()!==String(id))return false;
+ var members=factionActivityMembers(response);
+ var counts={Online:0,Idle:0,Offline:0};
+ var recognized=0;
+ members.forEach(x=>{
+  var status=['Online','Idle','Offline'].find(v=>v.toLowerCase()===x.status.toLowerCase());
+  if(status){counts[status]++;recognized++}
+ });
+ if(!recognized)return false;
+ now=now||Date.now();
+ factionActivityRoster=members;
+ var history=factionActivityHistory(id),last=history[history.length-1];
+ if(last&&now-last.t<ACTIVITY_SPACING)return false;
+ history.push({t:now,online:counts.Online,idle:counts.Idle,offline:counts.Offline,total:recognized});
+ storageSet('combatActivityFactionHistory_'+id,history.slice(-FACTION_ACTIVITY_MAX));
+ return true;
+}
+function factionActivityStats(samples){
+ var hours=Array.from({length:24},()=>({count:0,days:{},rateSum:0,onlineSum:0,totalSum:0}));
+ var days={};
+ samples.forEach(x=>{
+  var date=new Date(x.t),hour=date.getHours();
+  var day=date.getFullYear()+'-'+(date.getMonth()+1)+'-'+date.getDate();
+  var bucket=hours[hour];
+  bucket.count++;bucket.days[day]=true;days[day]=true;
+  bucket.rateSum+=x.online/x.total;bucket.onlineSum+=x.online;bucket.totalSum+=x.total;
+ });
+ var good=hours.map((x,h)=>({hour:h,count:x.count,days:Object.keys(x.days).length,
+  pct:x.count?Math.round(100*x.rateSum/x.count):0}))
+  .filter(x=>x.count>=3&&x.days>=2);
+ return {hours:hours,count:samples.length,days:Object.keys(days).length,
+  busiest:good.slice().sort((a,b)=>b.pct-a.pct||b.count-a.count).slice(0,4),
+  quietest:good.slice().sort((a,b)=>a.pct-b.pct||b.count-a.count).slice(0,4)};
+}
+async function factionActivitySweep(force){
+ var id=factionActivityId(),now=Date.now();
+ if(!id||!key()||factionActivityBusy||document.hidden===true)return;
+ if(!force&&now<factionActivityDue)return;
+ // A manual check may refresh the latest roster but never adds rapid duplicates.
+ factionActivityDue=now+15*60000;factionActivityBusy=true;
+ try{
+  var result=await api('faction/'+id+'/members');
+  if(id!==factionActivityId())return;
+  if(!factionActivityMembers(result).length)throw Error('No faction members returned');
+  factionActivityRecord(id,result,Date.now());
+  factionActivityError='';
+ }catch(e){
+  factionActivityError=String(e&&e.message||e).slice(0,160);
+  if(/invalid|incorrect key|disabled|paused|HTTP 401|HTTP 403/i.test(factionActivityError)){
+   factionActivityDue=Date.now()+3600000;
+  }
+ }finally{
+  factionActivityBusy=false;
+  if(state.view==='activity'&&root&&root.isConnected)render();
+ }
+}
+function renderFactionActivity(){
+ var id=factionActivityId();
+ var field=input('Faction ID',id||state.factionId||state.warOwn||''),message=txt('');
+ field.inputMode='numeric';
+ body.append(row(grow(field),button(id?'Change faction':'Track faction',()=>{
+  if(!valid(field.value)){message.textContent='Enter a valid faction ID';return}
+  var next=idOf(field.value);
+  if(next!==id)factionActivityRoster=[];
+  storageSet('combatActivityFactionId',next);
+  factionActivityDue=0;factionActivityError='';render();
+  void factionActivitySweep(true);
+ },true)),message);
+ if(!id){
+  body.append(txt('Enter a faction ID to follow its whole roster. The chart builds from periodic public member-status snapshots.'));
+  return;
+ }
+ var history=factionActivityHistory(id),stats=factionActivityStats(history),latest=history[history.length-1];
+ var current=latest?latest.online+' online, '+latest.idle+' idle, '+latest.offline+' offline':'Waiting for first roster snapshot';
+ body.append(card(title('Faction ['+id+']'),txt(current),
+  txt(stats.count+' roster snapshots across '+stats.days+' days in the last 14 days')),
+  row(button('Check now',()=>{void factionActivitySweep(true)},true),
+   button('Stop tracking',()=>{
+    storageDel('combatActivityFactionId');
+    factionActivityRoster=[];factionActivityError='';render();
+   },true)));
+ if(factionActivityError)body.append(notice('Last faction check: '+factionActivityError));
+ function formatHours(values){
+  return values.length?values.map(x=>activityHour(x.hour)+' ('+x.pct+'% online)').join(', '):'Not enough observations yet';
+ }
+ body.append(sec('FACTION BUSIEST HOURS'),txt(formatHours(stats.busiest)),
+  sec('FACTION QUIETEST HOURS'),txt(formatHours(stats.quietest)),
+  sec('HOURLY FACTION ONLINE % · LOCAL TIME'));
+ var grid=h('div',{class:'tc-activity-hours'});
+ stats.hours.forEach((bucket,hour)=>{
+  var enough=bucket.count>=3&&Object.keys(bucket.days).length>=2;
+  var pct=bucket.count?Math.round(100*bucket.rateSum/bucket.count):0;
+  var tone=enough?(pct>=35?'online':pct<=10?'offline':'mixed'):'limited';
+  var label=activityHour(hour);
+  grid.append(h('div',{class:'tc-activity-hour tc-activity-'+tone,
+   title:label+': '+pct+'% average online across '+bucket.count+' roster snapshots'},
+   h('span',{class:'tc-activity-label'},label),
+   h('span',{class:'tc-activity-value'},enough?pct+'%':bucket.count?'-':'—')));
+ });
+ body.append(grid,txt('Percentages are the average share of members marked Online in the roster at that hour. Gray means we need more checks; Idle is not Online.'));
+ if(stats.days<3||stats.count<24)body.append(txt('Still learning. This only records while Torn is open and visible.'));
+ if(factionActivityRoster.length){
+  var validMembers=factionActivityRoster.filter(x=>['Online','Idle','Offline'].some(v=>v.toLowerCase()===x.status.toLowerCase()));
+  var currentOnline=validMembers.filter(x=>x.status.toLowerCase()==='online')
+   .sort((a,b)=>a.name.localeCompare(b.name));
+  body.append(sec('CURRENTLY ONLINE · LAST ROSTER CHECK'),
+   txt(currentOnline.length+' of '+validMembers.length+' known member statuses online'));
+  var membersBox=h('div',{class:'tc-faction-active'});
+  currentOnline.slice(0,20).forEach(x=>membersBox.append(
+   h('a',{href:'https://www.torn.com/profiles.php?XID='+encodeURIComponent(x.id)},x.name+' ['+x.id+']')));
+  if(!currentOnline.length)membersBox.append(txt('No members marked online in the last snapshot.'));
+  if(currentOnline.length>20)membersBox.append(txt('+'+(currentOnline.length-20)+' more'));
+  body.append(membersBox);
+ }
+}
+
 function tabsRender(){
  var views=[['watch','Targets'],['activity','Activity'],['chain','Solo Chain'],['faction','Faction Chain'],['war','War']];
  tabs.replaceChildren(...views.map(x=>h('button',{class:'tc-tab'+(state.view===x[0]?' selected':''),type:'button',onclick:()=>switchTo(x[0])},x[1])));
@@ -569,7 +718,10 @@ function renderActivity(){
  var list=activityList();
  if(!list.some(x=>x.id===state.activitySelected))state.activitySelected=list.length?list[0].id:'';
  body.append(h('div',{class:'tc-view-header'},title('Activity Tracker'),txt(list.length+' / 10 tracked')),
-  txt('Shows typical online and offline hours using public Torn activity snapshots. It collects only while Torn is open and visible; hours use your device time.'));
+  txt('Player and faction activity, based on actual public API checks. Times use your device clock; data is collected only while Torn is open and visible.'));
+ body.append(sec('FACTION ACTIVITY'));
+ renderFactionActivity();
+ body.append(sec('INDIVIDUAL PLAYER TRACKING'));
  var entry=input('Add Torn player ID'),msg=txt('');entry.inputMode='numeric';
  body.append(row(grow(entry),button('Track player',()=>{
   var error=activityAdd(entry.value);if(error){msg.textContent=error;return}
@@ -920,6 +1072,7 @@ function start(){
    if(!root.isConnected || root.parentElement!==panelHost())mount();
    if(profileActivityId()&&!document.getElementById('tt-profile-activity'))mountProfileActivity();
    if(Date.now()>=activityDue)void activitySweep(false);
+   if(Date.now()>=factionActivityDue)void factionActivitySweep(false);
   },1200);
   state.target=targetURL();if(state.target){
    Promise.all([api('user/'+state.target+'/profile'),api('user/'+state.target+'/personalstats?cat=popular')])
