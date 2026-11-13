@@ -1,6 +1,12 @@
 # Torn Toolkit — Combat Edition
 
-Manual combat companion userscript for Torn, rebuilt cleanly in **v1.0.1** to prioritize Torn PDA on iPhone.
+Manual combat companion userscript for Torn, rebuilt cleanly in **v1.0.2** to prioritize Torn PDA on iPhone.
+
+## v1.0.2 PDA rendering fix
+
+The v1 rebuild had a runaway render loop: after each saved target status refresh, `refreshStatus()` called `render()` even when every status was cached or already in progress. A PDA instance with a populated watchlist and API key could endlessly rebuild its panel. It now rerenders **only after status data was actually updated**, with a regression test simulating a populated PDA watchlist.
+
+Torn PDA API calls now use the documented `PDA_httpGet(url, headers)` native bridge when available, falling back to browser `fetch` outside PDA. This avoids cross-origin browser restrictions and keeps all API calls directed to `api.torn.com`. No saved user data is erased, and the original Aurora stylesheet is unchanged.
 
 ## v1.0.1 placement correction
 
