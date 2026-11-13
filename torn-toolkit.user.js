@@ -471,6 +471,22 @@ const css=[
 ].join('');
 const state={view:'watch',lastView:'watch',watchPage:0,chainPage:0,factionPage:0,rosterPage:0,rosterSide:'own',rosterQuery:'',collapsed:store.get('combatCollapsed',true)===true,target:null,player:null,playerError:'',own:(store.get('combatWarFactions',{})||{}).own||'',enemy:(store.get('combatWarFactions',{})||{}).enemy||'',left:null,right:null,warError:'',loading:false,actPage:0};
 const apiCache=new Map(),inflight=new Map(),requests=[];
+async function tornGetJson(endpoint,apiKey){
+ const headers={Authorization:'ApiKey '+apiKey};
+ // PDA supplies a native cross-origin HTTP bridge. Prefer it to WebView fetch
+ // when available; desktop userscript managers keep their existing fetch path.
+ if(typeof PDA_httpGet==='function'){
+  const response=await PDA_httpGet(endpoint,headers);
+  const status=Number(response&&response.status);
+  if(!Number.isInteger(status)||status<200||status>=300)
+   throw Error('Torn API HTTP '+(status||'unknown'));
+  try{return JSON.parse(String(response.responseText||''))}
+  catch(_){throw Error('Torn PDA returned an invalid API response')}
+ }
+ const response=await fetch(endpoint,{headers});
+ if(!response.ok)throw Error('Torn API HTTP '+response.status);
+ return response.json();
+}
 async function api(path,params={},ttl=300){
  if(!key())throw Error('Add an API key in Settings');
  const q=new URLSearchParams(params),ident=path+'?'+q.toString(),cached=apiCache.get(ident);
@@ -480,9 +496,8 @@ async function api(path,params={},ttl=300){
  if(requests.length>=25)throw Error('API rate limit safeguard: try again shortly');
  requests.push(now);q.set('comment','TornToolkit');
  const pending=(async()=>{
-  const r=await fetch(API+path+'?'+q.toString(),{headers:{Authorization:'ApiKey '+key()}});
-  if(!r.ok)throw Error('Torn API HTTP '+r.status);
-  const v=await r.json();if(v.error)throw Error('Torn API: '+String(v.error.error||v.error.code));
+  const v=await tornGetJson(API+path+'?'+q.toString(),key());
+  if(v.error)throw Error('Torn API: '+String(v.error.error||v.error.code));
   apiCache.set(ident,{t:Date.now(),v});return v;
  })();
  inflight.set(ident,pending);try{return await pending}finally{inflight.delete(ident)}
@@ -670,9 +685,8 @@ function renderSettings(){
    if(k){
     message.textContent='Verifying…';
     try{
-     const r=await fetch(API+'key/info?comment=TornToolkit',{headers:{Authorization:'ApiKey '+k}});
-     const d=await r.json();
-     if(!r.ok||d.error)throw Error(d.error&&d.error.error||'Verification failed');
+     const d=await tornGetJson(API+'key/info?comment=TornToolkit',k);
+     if(d.error)throw Error(d.error.error||'Verification failed');
     }catch(e){message.textContent=String(e.message);return}
     store.set('apiKey',k);
    }else store.del('apiKey');
