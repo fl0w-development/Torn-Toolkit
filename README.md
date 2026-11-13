@@ -1,89 +1,32 @@
-# Torn Toolkit
+# Torn Toolkit — Combat Edition
 
-combat userscript for torn. target watchlist, solo chain list, faction chain orders and war rosters, all in one panel with an aurora background. everything is manual, it never attacks or does anything for you.
+Manual combat companion userscript for Torn, rebuilt cleanly in **v1.0.0** to prioritize Torn PDA on iPhone.
 
-current version: 0.8.7
+## The interface stays the same
 
-## Browser startup compatibility — v0.8.7
+The entire Aurora / night-sky stylesheet from v0.7–0.8.7 is retained, including twinkling stars, responsive mobile layout, green Attack buttons and the familiar four tabs:
 
-The built-in test-export guard previously returned from the entire userscript whenever a page exposed `module.exports`. This is unsafe in an injected browser context because third-party scripts or the page can create a global `module` variable. The guard now exports pure helpers and exits **only when there is no browser document** (the Node test environment).
+- **Targets** — searchable and grouped watchlist, notes, player profile, attack links and public status checks
+- **Solo Chain** — ordered hit queue, reorder, skip one hit, manual attack links
+- **Faction Chain** — faction verification using Torn API, leader/co-leader draft, share codes, local import, manual attack queue
+- **War** — public faction roster lookup, faction switching, search and manual attack links
 
-A simulated browser startup test confirms the panel mounts both when a `module.exports` object is present and absent. This fix does not claim to explain Torn PDA's unlocated `SyntaxError: Unexpected identifier 's'` message. The separate, proven PDA injection probe remains available at `diagnostics/pda-injection-probe.user.js`.
+No automated attacks or gameplay actions.
 
-## PDA startup diagnostics — v0.8.6
+## Install / update
 
-The user reported repeated `SyntaxError: Unexpected identifier 's'` messages in Torn PDA's terminal, but those messages do not identify their source. The complete v0.8.5 userscript passes JavaScript parsing checks, so we cannot attribute that syntax error to the toolkit without an error location.
+**Torn PDA on iOS/Android:** Settings → User Scripts → update the **existing** Torn Toolkit script from the [raw userscript](https://raw.githubusercontent.com/fl0w-development/Torn-Toolkit/main/torn-toolkit.user.js). Enable it and use the **END** injection time. Keep the existing script entry so existing storage is not discarded. Torn PDA inserts your API key automatically if configured.
 
-This diagnostic release preserves the original v0.7-based functionality and saved data, and adds only early startup diagnostics:
-- A small **Torn Toolkit starting…** badge is shown during initialization and removed when the toolkit starts normally.
-- A persistent **red startup error banner** appears at the top of the page if toolkit initialization or mounting throws. It includes the stage and concise error message.
-- If **neither badge nor error banner** appears while the PDA script is listed as injected, the issue may be parsing before execution or the PDA injection environment itself. The diagnostic cannot catch a syntax error that prevents the entire userscript from parsing.
+**Browser (Tampermonkey/Violentmonkey):** install the same script via the raw link. Open Toolkit Settings to save your API key.
 
-No watchlists, chains, API keys or preferences are deleted or reset. This is not proof the original terminal syntax error comes from Torn Toolkit.
+This rebuild uses the same storage keys as before: `combatWatchlist`, `combatSoloChain`, `combatFactionOrder_<faction ID>`, `combatCollapsed`, `combatAurora` and `apiKey`. Existing data is not intentionally deleted or reset.
 
-## PDA-compatible rollback
+The older version is archived in [legacy/torn-toolkit-v0.8.7.user.js](legacy/torn-toolkit-v0.8.7.user.js) and is recoverable if needed.
 
-**v0.8.5 is a rollback to the original v0.7.0 userscript behavior.** The activity tracker introduced in v0.8.0 and all later changes are paused because the panel stopped appearing in Torn PDA. The feature work is preserved in Git history and can be reintroduced carefully once tested on a real PDA device.
+## Development
 
-This restores the original v0.7.0 panel, page mounting, API calls and faction chain codes. The update uses version 0.8.5 so installed copies can receive it normally. This update does **not** delete existing watchlists, local chains, API keys, or stored activity-tracker data; the activity tracker simply isn't running.
+The entrypoint `torn-toolkit.user.js` contains the complete clean runtime. The same version is staged in `torn-toolkit.rebuilt.user.js` for comparison. Run `npm test` to validate JavaScript parsing, preserved styling, storage identifiers, and browser mounting against a simulated DOM with an empty or existing watchlist.
 
-In Torn PDA, replace/update the installed script from the raw main-branch source and reload Torn. If necessary, set injection time to **END**, matching the userscript's manager defaults as supported by PDA. The script metadata itself is restored exactly except for version numbers.
+**Testing limitation:** passing CI is not a substitute for installing the script in Torn PDA's iOS WebView. Version 1.0.0 requires a real-device smoke test to confirm the panel is visible. The independent injection probe, which already displayed successfully on a PDA device, remains in `diagnostics/pda-injection-probe.user.js`.
 
-## install
-
-1. get tampermonkey or violentmonkey
-2. [install the script](https://raw.githubusercontent.com/fl0w-development/Torn-Toolkit/main/torn-toolkit.user.js)
-3. open settings in the panel and paste your api key (a public key is enough)
-
-if you had an older version of torn toolkit installed turn it off so you dont have two panels.
-
-### phone
-
-- torn pda: add it under settings > userscripts, pda puts your key in for you
-- android: firefox with tampermonkey or violentmonkey
-- iphone/ipad: safari with tampermonkey or the userscripts app
-
-## what it does
-
-**targets**
-add people by id, sort them into categories, add notes and see if they are okay, in hospital, jail or traveling. on someones profile it shows a rough stat estimate (its only a guess from public info).
-
-**solo chain**
-your own hit list. shows who is next with an attack button, skip takes them off the chain but keeps them on your watchlist. you can move hits up and down.
-
-**faction chain**
-leaders and co-leaders make a chain order and get a code. post the code in faction chat, members paste it in and load it. the script checks with torn that the code is for your faction and that the person who made it is actually a leader.
-
-the codes arent signed so only load ones your leadership actually posted. you need a new code every time the order changes.
-
-**war**
-put in your faction id and the enemy faction id to see both rosters with statuses and attack links. no battle stats here, its just public info.
-
-**settings**
-api key and the aurora on/off switch. if your phone or computer has reduced motion turned on the aurora and stars dont move.
-
-## api key
-
-| | |
-|---|---|
-| data storage | only on your device |
-| data sharing | nobody |
-| purpose of use | just for you, nothing is collected |
-| key storage & sharing | saved in your browser, only sent to api.torn.com |
-| key access level | public is enough for everything |
-
-no server, nothing gets sent anywhere except torn's api.
-
-## issues
-
-message me in torn: [fl0ww_ [4605130]](https://www.torn.com/profiles.php?XID=4605130)
-
-## license
-
-0.5.4 and newer are under the [PolyForm Strict License 1.0.0](LICENSE). you can install and use it as is for yourself, but dont copy, change, reupload or sell it without asking me first.
-
-0.5.3 and older were MIT and those stay MIT ([old license](https://github.com/fl0w-development/Torn-Toolkit/blob/5bf015d6e82e1656405f755f404959c3c20bbb57/LICENSE)).
-
-## tests
-
-`npm test`
+Message **fl0ww_ [4605130]** on Torn for questions.
