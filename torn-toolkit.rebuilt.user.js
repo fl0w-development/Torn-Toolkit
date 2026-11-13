@@ -22,7 +22,7 @@ var PDA_KEY = '###PDA-APIKEY###';
 var isPDA = PDA_KEY.indexOf('#') < 0;
 var root, body, tabs, counts;
 var state = {view:'watch',watchPage:0,chainPage:0,factionPage:0,warPage:0,warSide:'own',collapsed:false,target:null,player:null,
-  factionId:'',memberId:'',editor:false,identityError:'',draft:null,shareCode:'',warOwn:'',warEnemy:'',warLeft:[],warRight:[],warLoaded:false};
+  factionId:'',memberId:'',leaderId:'',coLeaderId:'',editor:false,identityError:'',draft:null,shareCode:'',warOwn:'',warEnemy:'',warLeft:[],warRight:[],warLoaded:false};
 var cache = {};
 var busy = {};
 var status = {};
@@ -61,6 +61,17 @@ function key(){return isPDA?PDA_KEY:String(storageGet('apiKey','')||'');}
 function valid(id){return /^\d{1,10}$/.test(String(id).trim()) && Number(id)>0;}
 function idOf(id){return String(Number(id));}
 function attackURL(id){return 'https://www.torn.com/page.php?sid=attack&user2ID='+encodeURIComponent(id);}
+const ranks=['Absolute beginner','Beginner','Inexperienced','Rookie','Novice','Below average','Average','Reasonable','Above average','Competent','Highly competent','Veteran','Distinguished','Highly distinguished','Professional','Star','Master','Outstanding','Celebrity','Supreme','Idolized','Champion','Heroic','Legendary','Elite','Invincible'];
+const ranges=['under ~2.5k','~2k–25k','~20k–250k','~200k–2.5m','~2m–35m','~20m–250m','over ~200m'];
+function number(v){if(v==null||v==='')return null;const n=Number(v);return Number.isFinite(n)&&n>=0?n:null}
+function estimate(p,ps){
+ const rank=ranks.findIndex(x=>x.toLowerCase()===String(p&&p.rank||'').trim().toLowerCase());
+ const l=number(p&&p.level),c=number(ps&&ps.crimes&&ps.crimes.total),n=number(ps&&ps.networth&&ps.networth.total);
+ if(rank<0||l===null||c===null||n===null)return {label:'Insufficient public data',confidence:'None'};
+ const count=(a,v)=>a.filter(t=>v>=t).length;
+ const b=rank-count([2,6,11,26,31,50,71,100],l)-count([100,5000,10000,20000,30000,50000],c)-count([5e6,5e7,5e8,5e9,5e10],n);
+ return b<0||b>6?{label:'Inconsistent rank data',confidence:'None'}:{label:ranges[b],confidence:'Low'};
+}
 function watch(){
  var v=storageGet('combatWatchlist',[]);
  return (Array.isArray(v)?v:[]).filter(x=>x && valid(x.id)).map(x=>({id:idOf(x.id),name:String(x.name||'Player '+x.id).slice(0,60),group:String(x.group||'General'),note:String(x.note||'').slice(0,200)})).slice(0,250);
@@ -375,7 +386,7 @@ function renderWatch(){
  if(state.target){
   var info=state.player||{},p=info.profile||{},name=String(p.name||'Player '+state.target);
   body.append(h('div',{class:'tc-card tc-current'},sec('CURRENT PROFILE'),row(grow(title(name+' ['+state.target+']'),
-   statusNode(state.target)),linkAttack(state.target),
+   statusNode(state.target),info && info.profile?txt('Estimated stats: '+estimate(p,info.personalstats||{}).label+' · Low confidence'):null),linkAttack(state.target),
    button('Add target',()=>{addTarget(state.target,name);render()},true)),
    txt('Public data only · combat actions are always manual')));
  }
@@ -467,17 +478,19 @@ async function verifyFaction(){
  if(!key())return;
  state.identityError='Checking faction…';render();
  try{
-  var result=await api('user/basic');
-  var u=result.profile||result,who=u.id||u.player_id,fac=u.faction_id||(u.faction&&u.faction.faction_id);
-  if(!valid(who)||!valid(fac))throw Error('Faction membership unavailable from API');
-  state.memberId=idOf(who);state.factionId=idOf(fac);
-  var fr=await api('faction/'+state.factionId+'/basic');
-  var f=fr.basic||fr;
-  var leaderId=f.leader_id||(f.leader&&f.leader.id);
-  var coId=f.co_leader_id||(f.co_leader&&f.co_leader.id);
-  state.editor=String(leaderId)===state.memberId||String(coId)===state.memberId;
+  var response=await api('key/info'),user=response.info && response.info.user || {};
+  if(!valid(user.id)||!valid(user.faction_id))throw Error('Torn did not return your faction membership.');
+  var factionId=idOf(user.faction_id),memberId=idOf(user.id);
+  var results=await Promise.all([api('faction/'+factionId+'/basic'),api('faction/'+factionId+'/members')]);
+  var info=results[0].basic||{},members=parseMembers(results[1]);
+  if(!valid(info.id)||idOf(info.id)!==factionId||!members.some(x=>x.id===memberId))
+   throw Error('Torn did not confirm your faction membership.');
+  state.memberId=memberId;state.factionId=factionId;
+  state.leaderId=valid(info.leader_id)?idOf(info.leader_id):'';
+  state.coLeaderId=valid(info.co_leader_id)?idOf(info.co_leader_id):'';
+  state.editor=memberId===state.leaderId||memberId===state.coLeaderId;
   leader=true;state.identityError='';
- }catch(e){state.identityError=String(e.message||e)}
+ }catch(e){state.identityError=String(e.message||e);leader=null}
  render();
 }
 function renderFaction(){
@@ -497,6 +510,7 @@ function renderFaction(){
    try{
     var p=decodeShare(field.value);
     if(p.factionId!==state.factionId)throw Error('Code belongs to another faction');
+    if(p.authorId!==state.leaderId && p.authorId!==state.coLeaderId)throw Error('Code author is not a current faction leader or co-leader');
     storageSet('combatFactionOrder_'+state.factionId,p);state.factionPage=0;render();
    }catch(e){msg.textContent=String(e.message||e)}
   }),button('Pull from clipboard',async()=>{
@@ -625,7 +639,9 @@ function start(){
    if(!root.isConnected)mount();
   },1200);
   state.target=targetURL();if(state.target){
-   api('user/'+state.target+'/profile').then(x=>{state.player=x;if(state.view==='watch')render()}).catch(()=>{});
+   Promise.all([api('user/'+state.target+'/profile'),api('user/'+state.target+'/personalstats?cat=popular')])
+    .then(x=>{state.player={profile:x[0].profile||x[0],personalstats:x[1].personalstats||x[1]};if(state.view==='watch')render()})
+    .catch(()=>{state.player=null});
   }
  }catch(e){warn(e,'startup')}
 }
