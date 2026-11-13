@@ -623,7 +623,7 @@ function ensureMobileLauncher(){
  if(!inPDA()||mobileLauncher)return;
  var host=document.body||document.documentElement;if(!host)return;
  var launch=document.createElement('button');mobileLauncher=launch;
- launch.id='tc-pda-launcher';
+ launch.setAttribute('id','tc-pda-launcher');
  launch.type='button';
  launch.textContent='Torn Toolkit';
  launch.setAttribute('aria-label','Open Torn Toolkit');
