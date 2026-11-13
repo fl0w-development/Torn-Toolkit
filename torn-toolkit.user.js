@@ -218,6 +218,15 @@ const css=[
  "#tc-root .tc-activity-mixed{background:rgba(128,147,245,.12)}",
  "#tc-root .tc-activity-label{font:10px var(--tc-mono);white-space:nowrap;color:var(--tc-ink)}",
  "#tc-root .tc-activity-value{font:11px var(--tc-mono);color:var(--tc-muted)}",
+ "#tt-profile-activity{box-sizing:border-box;max-width:660px;width:100%;margin:12px 0 16px;padding:14px 16px;border:1px solid rgba(142,240,200,.26);border-radius:4px;background:linear-gradient(115deg,#081c24,#0d1223 70%,#160f2b);color:#e8ecf2;font:12.5px/1.5 system-ui,-apple-system,Arial,sans-serif}",
+ "#tt-profile-activity .tt-pa-heading{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:9px}",
+ "#tt-profile-activity .tt-pa-heading .tc-title{font:italic 400 19px/1.25 Georgia,serif}",
+ "#tt-profile-activity .tc-muted{font-size:11px;color:#a1aaba;margin:4px 0}",
+ "#tt-profile-activity .tt-pa-info{display:grid;gap:4px;color:#c9d0dd}",
+ "#tt-profile-activity .tt-pa-info strong{color:#9cf2ce;font-weight:600}",
+ "#tt-profile-activity .tt-pa-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:9px 0}",
+ "#tt-profile-activity .tc-btn{border:1px solid rgba(142,240,200,.4);background:rgba(142,240,200,.1);color:#9cf2ce;border-radius:3px;padding:6px 10px;font:600 12px system-ui;cursor:pointer}",
+ "#tt-profile-activity .tt-pa-message{color:#ffaaaa;font-size:11px}",
  "#tc-root .tc-muted{font-size:11.5px;color:var(--tc-muted);line-height:1.45;margin:2px 0}",
  "#tc-root .tc-view-header{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:0 0 12px}",
  "#tc-root .tc-view-header .tc-title{font:italic 400 19px/1.15 var(--tc-serif);letter-spacing:-.01em}",
@@ -403,12 +412,13 @@ function activityAdd(id,name){
  var a=activityList();if(a.some(x=>x.id===id)){state.activitySelected=id;return ''}
  if(a.length>=10)return 'Maximum of 10 tracked players';
  a.push({id:id,name:String(name||watch().find(x=>x.id===id)?.name||'Player '+id).slice(0,60)});
- storageSet('combatActivityTargets',a);state.activitySelected=id;activityDue=0;return '';
+ storageSet('combatActivityTargets',a);state.activitySelected=id;activityDue=0;updateProfileActivity();return '';
 }
 function activityRemove(id){
  storageSet('combatActivityTargets',activityList().filter(x=>x.id!==id));
  storageDel('combatActivityHistory_'+id);
  if(state.activitySelected===id)state.activitySelected='';
+ updateProfileActivity();
 }
 function activityRecord(id,profile,now){
  var tracked=activityList(),item=tracked.find(x=>x.id===String(id));
@@ -421,6 +431,7 @@ function activityRecord(id,profile,now){
  if(last&&now-last.t<ACTIVITY_SPACING)return false;
  history.push({t:now,s:stateName});
  storageSet('combatActivityHistory_'+id,history.slice(-700));
+ updateProfileActivity();
  if(profile.name&&item.name!==String(profile.name)){
   item.name=String(profile.name).slice(0,60);
   storageSet('combatActivityTargets',tracked);
@@ -468,6 +479,71 @@ async function activitySweep(force){
  }finally{
   activityBusy=false;
   if(state.view==='activity'&&root&&root.isConnected)render();
+ }
+}
+
+
+// Small activity summary placed below the native player profile.
+// The full hourly overview stays in the Activity tab.
+function profileActivityId(){
+ try{
+  var u=new URL(location.href);
+  var id=u.pathname==='/profiles.php'?u.searchParams.get('XID'):null;
+  return valid(id)?idOf(id):null;
+ }catch(_){return null}
+}
+function profileActivityHours(list){
+ return list.length?list.map(activityHour).join(', '):'Still learning';
+}
+function removeProfileActivity(){
+ var existing=document.getElementById('tt-profile-activity');
+ if(existing&&existing.parentElement)existing.parentElement.removeChild(existing);
+}
+function updateProfileActivity(){
+ var id=profileActivityId();
+ if(!id){removeProfileActivity();return}
+ var widget=document.getElementById('tt-profile-activity');
+ if(!widget)return;
+ if(widget.getAttribute('data-player-id')!==id)return;
+ var isTracked=activityList().some(x=>x.id===id);
+ var samples=isTracked?activitySamples(id):[],stats=activityStats(samples);
+ var last=samples[samples.length-1];
+ var lines=h('div',{class:'tt-pa-info'},
+  h('div',{},'Usually online: ',h('strong',{},isTracked?profileActivityHours(stats.online):'Not tracking yet')),
+  h('div',{},'Usually offline: ',h('strong',{},isTracked?profileActivityHours(stats.offline):'Not tracking yet')),
+  txt(isTracked?stats.count+' observations across '+stats.days+' days · last 14 days':'Track this player to start building an hourly activity history.'),
+  isTracked&&last?txt('Last observed: '+last.s+' · '+new Date(last.t).toLocaleString()):null);
+ var action=isTracked?button('Full activity',()=>{
+  state.activitySelected=id;switchTo('activity');
+  if(root&&typeof root.scrollIntoView==='function')root.scrollIntoView({block:'nearest'});
+ },true):button('Track activity',()=>{
+  var name=state.player&&state.target===id&&state.player.profile&&state.player.profile.name;
+  var message=activityAdd(id,name);
+  if(message){var note=widget.querySelector('.tt-pa-message');if(note)note.textContent=message;return}
+  updateProfileActivity();
+  void activitySweep(true);
+ },true);
+ widget.replaceChildren(
+  h('div',{class:'tt-pa-heading'},title('Activity Tracker'),txt('Observed activity · local time')),
+  lines,
+  h('div',{class:'tt-pa-actions'},action,h('div',{class:'tt-pa-message'})),
+  txt('Based on public API snapshots while Torn is open, not exact login history.')
+ );
+}
+function mountProfileActivity(){
+ var id=profileActivityId();
+ if(!id){removeProfileActivity();return}
+ var host=panelHost();
+ if(!host)return;
+ var widget=document.getElementById('tt-profile-activity');
+ if(widget&&widget.getAttribute('data-player-id')!==id){removeProfileActivity();widget=null}
+ if(!widget){
+  widget=h('section',{id:'tt-profile-activity','data-player-id':id,
+   'aria-label':'Torn Toolkit Activity Tracker'});
+  host.appendChild(widget);
+  updateProfileActivity();
+ }else if(!widget.isConnected){
+  host.appendChild(widget);
  }
 }
 
@@ -823,16 +899,31 @@ function start(){
    h('div',{class:'tc-foot'},h('span',{},'issues? message ',h('a',{href:'https://www.torn.com/profiles.php?XID=4605130'},'fl0ww_ [4605130]')),h('span',{},'v'+VERSION)));
   root.classList.toggle('tc-no-aurora',storageGet('combatAurora',true)===false);
   root.classList.toggle('tc-collapsed',state.collapsed);
-  mount();tabsRender();render();
+  mount();tabsRender();render();mountProfileActivity();
   var prev=location.href;
   setInterval(()=>{
-   if(location.href!==prev){prev=location.href;state.target=targetURL();if(state.view==='watch')render();}
+   if(location.href!==prev){
+    prev=location.href;state.target=targetURL();state.player=null;
+    if(state.view==='watch')render();
+    mountProfileActivity();
+    // Update the summary for client-side navigation without reloading Torn.
+    if(profileActivityId()&&key()){
+     var requested=profileActivityId();
+     api('user/'+requested+'/profile').then(p=>{
+      if(profileActivityId()!==requested)return;
+      state.player={profile:p.profile||p,personalstats:{}};
+      activityRecord(requested,p.profile||p,Date.now());
+      updateProfileActivity();
+     }).catch(()=>{});
+    }
+   }
    if(!root.isConnected || root.parentElement!==panelHost())mount();
+   if(profileActivityId()&&!document.getElementById('tt-profile-activity'))mountProfileActivity();
    if(Date.now()>=activityDue)void activitySweep(false);
   },1200);
   state.target=targetURL();if(state.target){
    Promise.all([api('user/'+state.target+'/profile'),api('user/'+state.target+'/personalstats?cat=popular')])
-    .then(x=>{state.player={profile:x[0].profile||x[0],personalstats:x[1].personalstats||x[1]};if(state.view==='watch')render()})
+    .then(x=>{state.player={profile:x[0].profile||x[0],personalstats:x[1].personalstats||x[1]};activityRecord(state.target,x[0].profile||x[0],Date.now());updateProfileActivity();if(state.view==='watch')render()})
     .catch(()=>{state.player=null});
   }
  }catch(e){warn(e,'startup')}
