@@ -20,7 +20,7 @@ test('a startup error is shown on screen with the version, reason and contact',(
  report(new TypeError("Cannot read properties of null (reading 'own')"),'loading');
  assert.equal(added.length,1);
  assert.equal(added[0].id,'tc-crash');
- assert.match(added[0].textContent,/Torn Toolkit 0\.8\.2 hit an error \(loading\): Cannot read properties of null/);
+ assert.ok(added[0].textContent.includes('Torn Toolkit '+version+' hit an error (loading): Cannot read properties of null'));
  assert.match(added[0].textContent,/fl0ww_ \[4605130\]/);
  report(new Error('second'),'startup');
  assert.equal(added.length,1,'only one bar, never a pile of them');
