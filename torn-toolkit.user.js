@@ -1,65 +1,29 @@
 // ==UserScript==
 // @name         Torn Toolkit — Combat Edition
 // @namespace    https://github.com/fl0w-development/Torn-Toolkit
-// @version      0.8.4
-// @description  Manual target watchlists, solo chain lists, faction chain orders, war rosters and enemy activity. No gameplay automation.
+// @version      0.8.5
+// @description  Manual target watchlists, solo chain lists and read-only faction rosters. No gameplay automation.
 // @author       fl0w-development
 // @copyright    Copyright (c) 2026 fl0w-development
 // @license      PolyForm-Strict-1.0.0
-// @match        *://www.torn.com/*
-// @match        *://torn.com/*
+// @match        https://www.torn.com/*
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_deleteValue
 // @connect      api.torn.com
-// @run-at       document-end
+// @run-at       document-idle
 // @downloadURL  https://raw.githubusercontent.com/fl0w-development/Torn-Toolkit/main/torn-toolkit.user.js
 // @updateURL    https://raw.githubusercontent.com/fl0w-development/Torn-Toolkit/main/torn-toolkit.user.js
 // ==/UserScript==
 (function(){
 'use strict';
-const VER='0.8.4',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
-// CRASH-REPORT-START
-// If anything fails while starting, show a small bar with the reason instead of failing silently.
-function tcReportCrash(e,where){
- try{
-  if(document.getElementById('tc-crash'))return;
-  const msg=String(e&&e.message||e).slice(0,200),line=String(e&&e.stack||'').split('\n').slice(0,2).join(' ').slice(0,160);
-  const bar=document.createElement('div');bar.id='tc-crash';
-  bar.style.cssText='position:fixed;left:8px;right:8px;top:8px;z-index:2147483647;padding:10px 12px;border-radius:4px;'+
-   'background:#3a0f14;color:#ffd7d7;border:1px solid #ff8a8a;font:12px/1.4 system-ui,Arial,sans-serif;box-shadow:0 4px 18px rgba(0,0,0,.5)';
-  bar.textContent='Torn Toolkit '+VER+' hit an error ('+where+'): '+msg+(line?' | '+line:'')+' (tap to hide, screenshot this for fl0ww_ [4605130])';
-  bar.addEventListener('click',()=>bar.remove());
-  (document.body||document.documentElement).append(bar);
- }catch(_){}
-}
-// CRASH-REPORT-END
-try{
-const isPda=!PDA.includes('#');
-const pdaRuntime=isPda||typeof PDA_httpGet==='function'||typeof PDA_storage!=='undefined';
-// STORE-START
-// Use the userscript manager's storage only when it answers right away. Some phone apps
-// return nothing for unsaved keys or hand back promises, so reads always fall back safely.
-const hasGM=(()=>{
- try{
-  if(typeof GM_getValue!=='function'||typeof GM_setValue!=='function')return false;
-  const probe=GM_getValue('combatStorageProbe',null);
-  return !(probe&&typeof probe.then==='function');
- }catch(_){return false}
-})();
+const VER='0.8.5',API='https://api.torn.com/v2/',PDA='###PDA-APIKEY###';
+const isPda=!PDA.includes('#'),hasGM=typeof GM_getValue==='function'&&typeof GM_setValue==='function';
 const store={
- get(k,f){
-  try{
-   let v;
-   if(hasGM)v=GM_getValue(k,f);
-   else{const raw=localStorage.getItem('tt_'+k);v=raw==null?f:JSON.parse(raw)}
-   return v==null||(typeof v==='object'&&typeof v.then==='function')?f:v;
-  }catch(_){return f}
- },
+ get(k,f){try{if(hasGM)return GM_getValue(k,f);const v=localStorage.getItem('tt_'+k);return v==null?f:JSON.parse(v)}catch(_){return f}},
  set(k,v){try{if(hasGM)GM_setValue(k,v);else localStorage.setItem('tt_'+k,JSON.stringify(v))}catch(_){}},
  del(k){try{if(hasGM&&typeof GM_deleteValue==='function')GM_deleteValue(k);else localStorage.removeItem('tt_'+k)}catch(_){}}
 };
-// STORE-END
 const key=()=>isPda?PDA:store.get('apiKey','');
 const good=id=>/^\d{1,10}$/.test(String(id).trim())&&Number(id)>0;
 const norm=id=>String(Number(id));
@@ -96,79 +60,8 @@ function addWatch(id,name){
 function members(response){
  const raw=response&&response.members,arr=Array.isArray(raw)?raw:raw&&typeof raw==='object'?Object.entries(raw).map(([id,v])=>({id,...v})):[];
  return arr.filter(x=>x&&good(x.id)).map(x=>({id:norm(x.id),name:String(x.name||'Player '+x.id),
-  level:x.level==null?'?':x.level,status:String(x.status&& (x.status.description||x.status.state)||'Unknown'),
-  lastStatus:String(x.last_action&&x.last_action.status||''),lastTs:Number(x.last_action&&x.last_action.timestamp)||0}));
+  level:x.level==null?'?':x.level,status:String(x.status&& (x.status.description||x.status.state)||'Unknown')}));
 }
-// ACTIVITY-CORE-START
-// Enemy activity: built from Torn's public faction member list, stored only on this device.
-// Week cells hold [samples, share of members online]; member cells hold [samples, online].
-// Older data fades out (about 7% per day) and members unseen for 30 days are dropped.
-const ACT_DECAY=0.93,ACT_MAX_DAYS=30,ACT_MIN_HOURS=12;
-function actBucket(ts){const d=new Date(ts*1000);return{dow:(d.getUTCDay()+6)%7,hour:d.getUTCHours(),day:Math.floor(ts/86400)}}
-function actWeight(status){const s=String(status||'').toLowerCase();return s==='online'?1:s==='idle'?0.5:0}
-function actNewFaction(){return{updated:0,day:0,lastPoll:0,week:Array.from({length:168},()=>[0,0]),members:{}}}
-function actDecay(f,day){
- if(f.day&&day>f.day){
-  const k=Math.pow(ACT_DECAY,day-f.day);
-  f.week.forEach(c=>{c[0]*=k;c[1]*=k});
-  for(const m of Object.values(f.members))m.h.forEach(c=>{c[0]*=k;c[1]*=k});
- }
- f.day=Math.max(f.day||0,day);
-}
-function actRecord(f,roster,now){
- const b=actBucket(now);actDecay(f,b.day);
- if(!roster.length)return f;
- const share=roster.reduce((a,p)=>a+actWeight(p.lastStatus),0)/roster.length;
- const cell=f.week[b.dow*24+b.hour];cell[0]+=1;cell[1]+=share;
- roster.forEach(p=>{
-  const m=f.members[p.id]||(f.members[p.id]={n:p.name,h:Array.from({length:24},()=>[0,0]),p:0,seen:b.day});
-  m.n=p.name;m.seen=b.day;
-  m.h[b.hour][0]+=1;m.h[b.hour][1]+=actWeight(p.lastStatus);
-  // They acted while we weren't checking (e.g. Torn was closed): count that hour as active.
-  if(m.p&&p.lastTs&&p.lastTs>m.p&&p.lastTs<now-300){
-   const hb=actBucket(p.lastTs).hour;
-   if(hb!==b.hour){m.h[hb][0]+=1;m.h[hb][1]+=1}
-  }
-  m.p=now;
- });
- for(const [id,m] of Object.entries(f.members))if(b.day-m.seen>ACT_MAX_DAYS)delete f.members[id];
- f.updated=now;return f;
-}
-function actRates(cells){return cells.map(c=>c&&c[0]>=1?c[1]/c[0]:null)}
-function actFactionHours(f){
- const out=[];
- for(let hr=0;hr<24;hr++){let n=0,a=0;for(let d=0;d<7;d++){const c=f.week[d*24+hr];n+=c[0];a+=c[1]}out.push(n>=1?a/n:null)}
- return out;
-}
-function actKnown(rates){return rates.filter(r=>r!=null).length}
-function actQuietWindow(rates,len){
- len=len||5;let best=null;
- for(let st=0;st<24;st++){
-  let sum=0,ok=true;
-  for(let i=0;i<len;i++){const r=rates[(st+i)%24];if(r==null){ok=false;break}sum+=r}
-  if(ok&&(!best||sum/len<best.avg))best={start:st,end:(st+len)%24,avg:sum/len};
- }
- return best;
-}
-function actBusiest(rates){let b=-1;rates.forEach((r,i)=>{if(r!=null&&(b<0||r>rates[b]))b=i});return b<0?null:b}
-const actHH=x=>String(x).padStart(2,'0');
-function actOfflineLine(m){
- if(!m)return null;
- const r=actRates(m.h),known=actKnown(r);
- if(known<ACT_MIN_HOURS)return{learning:true,known,text:'learning activity ('+known+'/'+ACT_MIN_HOURS+' hours seen)'};
- let best={len:0,start:0};
- for(let st=0;st<24;st++){
-  let len=0;
-  while(len<23){const v=r[(st+len)%24];if(v==null||v>=0.2)break;len++}
-  if(len>best.len)best={len,start:st};
- }
- if(best.len>=3)return{learning:false,start:best.start,end:(best.start+best.len)%24,
-  text:'usually offline '+actHH(best.start)+'–'+actHH((best.start+best.len)%24)+' TCT'};
- const eve=[17,18,19,20,21,22,23].map(x=>r[x]).filter(x=>x!=null);
- if(eve.length>=4&&eve.reduce((a,b)=>a+b,0)/eve.length>0.5)return{learning:false,text:'online most evenings'};
- return{learning:false,text:'no clear pattern yet'};
-}
-// ACTIVITY-CORE-END
 function move(list,i,d){const j=i+d,v=list.slice();if(j>=0&&j<v.length)[v[i],v[j]]=[v[j],v[i]];return v}
 // Remove exactly one planned hit; duplicates elsewhere in the chain remain.
 function removeHitAt(list,index){const v=list.slice();if(Number.isInteger(index)&&index>=0&&index<v.length)v.splice(index,1);return v}
@@ -248,27 +141,7 @@ const css=[
  " background-color:#060a13;color:var(--tc-ink);font:12.5px/1.45 system-ui,-apple-system,\"Segoe UI\",Roboto,Arial,sans-serif;",
  /* a faint, fixed star field under the aurora */
  "}",
- /* Keep the panel out of Torn's hidden/replaced content sections. */
- "#tc-root.tc-docked{position:fixed!important;top:auto!important;left:auto!important;",
- " right:max(10px,env(safe-area-inset-right))!important;bottom:max(10px,env(safe-area-inset-bottom))!important;",
- " z-index:2147483000!important;width:min(660px,calc(100vw - 20px))!important;",
- " max-height:calc(100vh - 20px)!important;margin:0!important;display:block!important;",
- " visibility:visible!important;opacity:1!important;transform:none!important}",
- "#tc-root.tc-docked.tc-collapsed{width:min(310px,calc(100vw - 20px))!important}",
- "#tc-root.tc-docked .tc-body{max-height:min(406px,calc(100vh - 145px));overscroll-behavior:contain}",
- "@media(max-width:570px){",
- " #tc-root.tc-docked{right:8px!important;bottom:max(8px,env(safe-area-inset-bottom))!important;",
- " width:calc(100vw - 16px)!important}",
- " #tc-root.tc-docked.tc-collapsed{width:min(270px,calc(100vw - 16px))!important}",
- " #tc-root.tc-docked .tc-body{max-height:min(365px,calc(100vh - 142px))}",
- "}",
-  /* Torn PDA WebView has its own lower browser controls. Keep launcher high and tappable. */
- "#tc-root.tc-docked.tc-pda{top:max(72px,env(safe-area-inset-top))!important;",
- " bottom:auto!important;right:8px!important;",
- " width:min(660px,calc(100vw - 16px))!important;max-height:calc(100dvh - 90px)!important}",
- "#tc-root.tc-docked.tc-pda.tc-collapsed{width:min(258px,calc(100vw - 16px))!important}",
- "#tc-root.tc-docked.tc-pda .tc-body{max-height:min(365px,calc(100dvh - 185px))}",
-  "#tc-root::before,#tc-root::after{",
+ "#tc-root::before,#tc-root::after{",
  " content:\"\";position:absolute;z-index:0;pointer-events:none;will-change:transform",
  "}",
  "#tc-root::before{",
@@ -423,20 +296,6 @@ const css=[
  " border-top:1px solid var(--tc-line);font:11px var(--tc-mono);color:var(--tc-muted);background:rgba(6,10,19,.5)}",
  "#tc-root .tc-foot a,#tc-root .tc-contact a{color:var(--tc-accent);text-decoration:none}",
  "#tc-root .tc-foot a:hover,#tc-root .tc-contact a:hover{text-decoration:underline}",
- "#tc-root .tc-heat{display:grid;grid-template-columns:30px repeat(24,minmax(0,1fr));gap:2px;margin:8px 0 4px;font:10px var(--tc-mono)}",
- "#tc-root .tc-heat-h{color:var(--tc-muted);white-space:nowrap;overflow:visible}",
- "#tc-root .tc-heat-d{color:var(--tc-muted);align-self:center}",
- "#tc-root .tc-heat-c{aspect-ratio:1/1;border-radius:2px}",
- "#tc-root .tc-heat-c.tc-nodata{background:repeating-linear-gradient(135deg,rgba(232,236,242,.05) 0 2px,transparent 2px 5px)}",
- "#tc-root .tc-heat-c.tc-quiet{outline:1px dashed rgba(242,196,109,.65);outline-offset:-1px}",
- "#tc-root .tc-legend{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font:10px var(--tc-mono);color:var(--tc-muted);margin:2px 0 10px}",
- "#tc-root .tc-legend i{display:inline-block;width:12px;height:12px;border-radius:2px}",
- "#tc-root .tc-strip{display:grid;grid-template-columns:repeat(24,minmax(0,1fr));gap:1px;margin:5px 0 2px}",
- "#tc-root .tc-strip i{height:8px;border-radius:1px;background:repeating-linear-gradient(135deg,rgba(232,236,242,.05) 0 2px,transparent 2px 5px)}",
- "#tc-root .tc-stat{display:flex;gap:18px;flex-wrap:wrap;margin:4px 0 10px}",
- "#tc-root .tc-stat b{display:block;font:italic 400 20px/1.1 var(--tc-serif);color:var(--tc-ink)}",
- "#tc-root .tc-stat span{font:10.5px var(--tc-mono);color:var(--tc-muted)}",
- "#tc-root .tc-habit{font:11px var(--tc-mono);color:#c9b8ff;margin:2px 0}",
  "#tc-root .tc-roster-row{border-bottom:1px solid var(--tc-line);padding:9px 0}",
  "#tc-root.tc-collapsed .tc-tabs,#tc-root.tc-collapsed .tc-body,#tc-root.tc-collapsed .tc-foot,",
  "#tc-root.tc-collapsed .tc-settings,#tc-root.tc-collapsed .tc-settings-btn{display:none!important}",
@@ -469,24 +328,8 @@ const css=[
  " #tc-root .tc-switch input::after{transition:none}",
  "}"
 ].join('');
-const state={view:'watch',lastView:'watch',watchPage:0,chainPage:0,factionPage:0,rosterPage:0,rosterSide:'own',rosterQuery:'',collapsed:store.get('combatCollapsed',true)===true,target:null,player:null,playerError:'',own:(store.get('combatWarFactions',{})||{}).own||'',enemy:(store.get('combatWarFactions',{})||{}).enemy||'',left:null,right:null,warError:'',loading:false,actPage:0};
+const state={view:'watch',lastView:'watch',watchPage:0,chainPage:0,factionPage:0,rosterPage:0,rosterSide:'own',rosterQuery:'',collapsed:store.get('combatCollapsed',true)===true,target:null,player:null,playerError:'',own:'',enemy:'',left:null,right:null,warError:'',loading:false};
 const apiCache=new Map(),inflight=new Map(),requests=[];
-async function tornGetJson(endpoint,apiKey){
- const headers={Authorization:'ApiKey '+apiKey};
- // PDA supplies a native cross-origin HTTP bridge. Prefer it to WebView fetch
- // when available; desktop userscript managers keep their existing fetch path.
- if(typeof PDA_httpGet==='function'){
-  const response=await PDA_httpGet(endpoint,headers);
-  const status=Number(response&&response.status);
-  if(!Number.isInteger(status)||status<200||status>=300)
-   throw Error('Torn API HTTP '+(status||'unknown'));
-  try{return JSON.parse(String(response.responseText||''))}
-  catch(_){throw Error('Torn PDA returned an invalid API response')}
- }
- const response=await fetch(endpoint,{headers});
- if(!response.ok)throw Error('Torn API HTTP '+response.status);
- return response.json();
-}
 async function api(path,params={},ttl=300){
  if(!key())throw Error('Add an API key in Settings');
  const q=new URLSearchParams(params),ident=path+'?'+q.toString(),cached=apiCache.get(ident);
@@ -496,8 +339,9 @@ async function api(path,params={},ttl=300){
  if(requests.length>=25)throw Error('API rate limit safeguard: try again shortly');
  requests.push(now);q.set('comment','TornToolkit');
  const pending=(async()=>{
-  const v=await tornGetJson(API+path+'?'+q.toString(),key());
-  if(v.error)throw Error('Torn API: '+String(v.error.error||v.error.code));
+  const r=await fetch(API+path+'?'+q.toString(),{headers:{Authorization:'ApiKey '+key()}});
+  if(!r.ok)throw Error('Torn API HTTP '+r.status);
+  const v=await r.json();if(v.error)throw Error('Torn API: '+String(v.error.error||v.error.code));
   apiCache.set(ident,{t:Date.now(),v});return v;
  })();
  inflight.set(ident,pending);try{return await pending}finally{inflight.delete(ident)}
@@ -659,14 +503,12 @@ function targetFromUrl(){
  return good(id)?norm(id):null;
 }
 function host(){
- // Torn can hide or replace its content containers. A persistent dock should
- // always be attached directly to BODY, not inside one of those containers.
- return document.body||document.documentElement;
+ for(const selector of ['.content-wrapper','#mainContainer','#main-content','main','#content']){
+  const found=document.querySelector(selector);if(found&&!found.closest('#tc-root'))return found;
+ }
+ return document.body;
 }
-function mount(){
- const dest=host();
- if(dest&&root.parentElement!==dest)dest.append(root);
-}
+function mount(){const dest=host();if(root.parentElement!==dest)dest.prepend(root)}
 function showSettings(){
  state.view=state.view==='settings'?(state.lastView||'watch'):'settings';
  renderTabs();render();body.scrollTop=0;
@@ -685,8 +527,9 @@ function renderSettings(){
    if(k){
     message.textContent='Verifying…';
     try{
-     const d=await tornGetJson(API+'key/info?comment=TornToolkit',k);
-     if(d.error)throw Error(d.error.error||'Verification failed');
+     const r=await fetch(API+'key/info?comment=TornToolkit',{headers:{Authorization:'ApiKey '+k}});
+     const d=await r.json();
+     if(!r.ok||d.error)throw Error(d.error&&d.error.error||'Verification failed');
     }catch(e){message.textContent=String(e.message);return}
     store.set('apiKey',k);
    }else store.del('apiKey');
@@ -705,14 +548,6 @@ function renderSettings(){
   h('div',{},title('Aurora ambience'),
    muted('Aurora and twinkling stars · respects reduced-motion preferences')),
   auroraToggle));
- const activityToggle=h('input',{type:'checkbox',checked:store.get('combatActivityOn',true)!==false,
-  'aria-label':'Track enemy faction activity',
-  onchange:()=>{store.set('combatActivityOn',activityToggle.checked);if(activityToggle.checked)void actPoll(true)}});
- body.append(h('label',{class:'tc-switch'},
-  h('div',{},title('Enemy activity tracking'),
-   muted('Checks the enemy faction from the War tab about every 5 minutes while Torn is open. Saved only in this browser.')),
-  activityToggle));
- body.append(row(confirmBtn('Clear activity data',()=>{store.del(ACT_KEY);render()},true)));
  body.append(h('div',{class:'tc-contact tc-muted',style:'margin-top:12px'},'Found a bug or need help? Message ',contactLink(),' in Torn.'));
 
 }
@@ -786,9 +621,7 @@ function renderWatch(){
     row(btn('Save',()=>{const all=watchlist(),current=all.find(t=>t.id===x.id);
      if(current){current.group=category.value;current.note=note.value.slice(0,200);saveWatch(all)}render()}),
     btn('Cancel',()=>{editor.hidden=true},true)));
-   const habit=actMemberLine(x.id);
    const entry=card(row(main(title(x.name+' ['+x.id+']'),statusBadge(x.id),
-     habit&&!habit.learning?h('div',{class:'tc-habit'},habit.text):null,
      muted(x.group+(x.note?' · '+x.note:''))),
     h('div',{class:'tc-actions'},attack(x.id),
      btn('+ Chain',()=>{saveChain([...chain(),x.id]);state.chainPage=0;switchView('chain')},true),
@@ -964,7 +797,6 @@ function renderWar(){
    if(state.loading)return;
    if(!good(own.value)||!good(enemy.value)){state.warError='Enter valid IDs for both factions';render();return}
    state.own=norm(own.value);state.enemy=norm(enemy.value);state.loading=true;
-   store.set('combatWarFactions',{own:state.own,enemy:state.enemy});void actPoll(true);
    state.warError='';state.left=null;state.right=null;
    state.rosterSide='own';state.rosterPage=0;state.rosterQuery='';render();
    try{
@@ -981,8 +813,7 @@ function renderWar(){
  if(state.left&&state.right){
   const selectors=h('div',{class:'tc-tabs'},...[
    ['own','Your faction ('+state.left.length+')'],
-   ['enemy','Enemy ('+state.right.length+')'],
-   ['activity','Activity']
+   ['enemy','Enemy ('+state.right.length+')']
   ].map(([side,label])=>h('button',{type:'button',
    class:'tc-tab'+(state.rosterSide===side?' selected':''),
    onclick:()=>{
@@ -993,10 +824,8 @@ function renderWar(){
   body.append(selectors,search,total,list,pager);
   const paint=()=>{
    const buttons=selectors.querySelectorAll('button');
-   ['own','enemy','activity'].forEach((side,i)=>buttons[i].classList.toggle('selected',state.rosterSide===side));
-   const showActivity=state.rosterSide==='activity';
-   search.hidden=showActivity;total.hidden=showActivity;
-   if(showActivity){pager.hidden=true;list.replaceChildren(activityView());return}
+   buttons[0].classList.toggle('selected',state.rosterSide==='own');
+   buttons[1].classList.toggle('selected',state.rosterSide==='enemy');
    const all=state.rosterSide==='own'?state.left:state.right;
    const q=state.rosterQuery.trim().toLowerCase();
    const filtered=all.filter(p=>p.name.toLowerCase().includes(q)||p.id.includes(q));
@@ -1020,88 +849,6 @@ function renderWar(){
  }
  body.append(muted('Roster data is public API information, not verified battle stats. Shared war planning is not enabled.'));
 }
-// Activity tracking (browser side): one public faction/members request every ~5 minutes
-// while Torn is open, shared between tabs, saved only in this browser.
-const ACT_KEY='combatActivity',ACT_EVERY=300;
-function actLoad(){const d=store.get(ACT_KEY,null);return d&&d.v===1&&d.factions?d:{v:1,factions:{}}}
-let actBusy=false;
-async function actPoll(force){
- if(actBusy||store.get('combatActivityOn',true)===false||!key())return;
- const fid=(store.get('combatWarFactions',{})||{}).enemy;if(!good(fid))return;
- const now=Math.floor(Date.now()/1000),data=actLoad();
- const f=data.factions[fid]||(data.factions[fid]=actNewFaction());
- if(!force&&now-f.lastPoll<ACT_EVERY-20)return; // another tab checked recently
- f.lastPoll=now;store.set(ACT_KEY,data);actBusy=true;
- try{
-  const roster=members(await api('faction/'+fid+'/members',{},60));
-  const fresh=actLoad(),ff=fresh.factions[fid]||(fresh.factions[fid]=actNewFaction());
-  actRecord(ff,roster,now);ff.lastPoll=now;
-  for(const [k,v] of Object.entries(fresh.factions))if(k!==fid&&now-(v.updated||0)>ACT_MAX_DAYS*86400)delete fresh.factions[k];
-  store.set(ACT_KEY,fresh);
-  if(state.view==='war'&&state.rosterSide==='activity')render();
- }catch(_){/* try again next time */}
- finally{actBusy=false}
-}
-function actMemberLine(id){
- const data=actLoad();
- for(const f of Object.values(data.factions)){const m=f.members&&f.members[id];if(m)return actOfflineLine(m)}
- return null;
-}
-const ACT_DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-function actColor(v){
- if(v==null)return '';
- if(v<=0.02)return 'background:rgba(232,236,242,.06)';
- const a=(0.14+v*0.86).toFixed(2);
- return 'background:'+(v>0.6?'rgba(170,140,255,'+a+')':'rgba(142,240,200,'+a+')');
-}
-function activityView(){
- const wrap=h('div'),f=actLoad().factions[state.enemy];
- if(store.get('combatActivityOn',true)===false){
-  wrap.append(h('div',{class:'tc-empty'},'Activity tracking is off. Turn it on in Settings.'));return wrap;
- }
- const hours=f?actFactionHours(f):Array(24).fill(null),known=actKnown(hours);
- wrap.append(h('div',{class:'tc-view-header'},title('Enemy activity'),
-  muted(f&&f.updated?'last checked '+new Date(f.updated*1000).toISOString().slice(11,16)+' TCT · tracked while Torn is open':'tracked while Torn is open')));
- const quiet=known>=ACT_MIN_HOURS?actQuietWindow(hours,5):null,busy=known>=ACT_MIN_HOURS?actBusiest(hours):null;
- if(quiet)wrap.append(h('div',{class:'tc-stat'},
-  h('div',{},h('b',{},actHH(quiet.start)+':00–'+actHH(quiet.end)+':00'),h('span',{},'quietest window, TCT')),
-  h('div',{},h('b',{},Math.round(quiet.avg*100)+'%'),h('span',{},'online then, on average')),
-  busy!=null?h('div',{},h('b',{},actHH(busy)+':00'),h('span',{},'busiest hour')):null));
- else wrap.append(h('div',{class:'tc-notice'},'Still learning: '+known+' of '+ACT_MIN_HOURS+' hours seen so far. The chart fills in as you play, so check back after a few sessions.'));
- const quietHours=quiet?Array.from({length:5},(_,i)=>(quiet.start+i)%24):[];
- const grid=h('div',{class:'tc-heat',role:'img','aria-label':'Weekly enemy activity heatmap, TCT'});
- grid.append(h('span',{}));
- for(let hr=0;hr<24;hr++)grid.append(h('span',{class:'tc-heat-h'},hr%3===0?actHH(hr):''));
- for(let d=0;d<7;d++){
-  grid.append(h('span',{class:'tc-heat-d'},ACT_DAYS[d]));
-  for(let hr=0;hr<24;hr++){
-   const c=f&&f.week[d*24+hr],v=c&&c[0]>=1?c[1]/c[0]:null;
-   grid.append(h('span',{class:'tc-heat-c'+(v==null?' tc-nodata':'')+(quietHours.includes(hr)?' tc-quiet':''),
-    style:actColor(v),title:ACT_DAYS[d]+' '+actHH(hr)+':00 TCT · '+(v==null?'no data yet':Math.round(v*100)+'% online')}));
-  }
- }
- wrap.append(grid,h('div',{class:'tc-legend'},'rarely',...[0.05,0.3,0.55,0.8,1].map(v=>h('i',{style:actColor(v)})),'almost always',
-  quiet?h('span',{style:'margin-left:auto'},'dashed = quietest'):null));
- // Members of the enemy roster we have data for
- const list=(state.right||[]).map(p=>({p,m:f&&f.members[p.id]})).filter(x=>x.m);
- wrap.append(h('div',{class:'tc-section'},'members'));
- if(!list.length)wrap.append(h('div',{class:'tc-empty'},'No member data yet.'));
- const page=pageSlice(list,state.actPage,5);state.actPage=page.page;
- page.items.forEach(({p,m})=>{
-  const line=actOfflineLine(m),strip=h('div',{class:'tc-strip'});
-  actRates(m.h).forEach(v=>strip.append(h('i',{style:actColor(v)})));
-  wrap.append(h('div',{class:'tc-card'},row(main(title(p.name+' ['+p.id+']'),
-   h('div',{class:line&&!line.learning?'tc-habit':'tc-muted'},line?line.text:''),strip),attack(p.id))));
- });
- if(page.pages>1){
-  const pager=h('div',{class:'tc-pager'},
-   btn('← Prev',()=>{state.actPage--;render()},true),muted((page.page+1)+' / '+page.pages),btn('Next →',()=>{state.actPage++;render()},true));
-  pager.querySelectorAll('button')[0].disabled=page.page===0;pager.querySelectorAll('button')[1].disabled=page.page===page.pages-1;
-  wrap.append(pager);
- }
- wrap.append(muted('Recorded in this browser from Torn’s public member list, about once every 5 minutes while Torn is open. Older activity fades out over about a month. Nothing is sent anywhere else.'));
- return wrap;
-}
 async function loadTarget(id){
  state.player=null;state.playerError='';render();
  if(!id||!key())return;
@@ -1123,7 +870,7 @@ function boot(){
  collapseBtn.classList.add('tc-toggle');
  collapseBtn.setAttribute('aria-controls','tc-tabs tc-body');
  headCounts=h('span',{class:'tc-count'},'');
- root=h('section',{id:'tc-root',class:'tc-docked'+(pdaRuntime?' tc-pda':''),'aria-label':'Torn Toolkit Combat Edition'},
+ root=h('section',{id:'tc-root','aria-label':'Torn Toolkit Combat Edition'},
   h('div',{class:'tc-stars','aria-hidden':'true'}),
   h('div',{class:'tc-head'},
    h('div',{class:'tc-brandlock'},
@@ -1143,24 +890,7 @@ function boot(){
   if(!root.isConnected||root.parentElement!==host())mount();
  },1500);
  setInterval(()=>{if(!document.hidden&&!state.collapsed)updateStatusNodes()},15000);
- void actPoll(false);setInterval(()=>{void actPoll(false)},60000);
 }
-function safeBoot(){try{boot()}catch(e){tcReportCrash(e,'startup')}}
-let bootAttempts=0,bootTimer=null;
-function bootWhenReady(){
- if(document.getElementById('tc-root'))return;
- if(document.body&&document.head){safeBoot();return}
- if(++bootAttempts>=24){tcReportCrash(new Error('Torn page document never became ready'),'startup');return}
- if(bootTimer===null)bootTimer=setInterval(()=>{
-  if(document.body&&document.head){clearInterval(bootTimer);bootTimer=null;safeBoot()}
-  else if(++bootAttempts>=24){clearInterval(bootTimer);bootTimer=null;
-   tcReportCrash(new Error('Torn page document never became ready'),'startup')}
- },250);
-}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bootWhenReady,{once:true});
-bootWhenReady();
-}catch(e){
- const show=()=>tcReportCrash(e,'loading');
- if(document.body)show();else document.addEventListener('DOMContentLoaded',show,{once:true});
-}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});
+else boot();
 })();
