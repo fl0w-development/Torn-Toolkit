@@ -1,11 +1,12 @@
 {
   "name": "torn-toolkit",
-  "version": "0.8.7",
+  "version": "1.0.0",
   "private": true,
   "description": "Manual Torn combat companion: local watchlists, solo chain lists, public faction rosters",
   "scripts": {
-    "test": "node --test tests/aurora-ui.test.js tests/pagination.test.js tests/watchlist-status.test.js tests/faction-share.test.js tests/mobile.test.js tests/night-ui.test.js tests/pda-startup-diagnostic.test.js tests/browser-module.test.js",
-    "test:legacy": "node --test test/logic.test.js"
+    "test": "node --test tests/rebuild.test.js",
+    "test:legacy": "node --test test/logic.test.js",
+    "test:classic": "node --test tests/aurora-ui.test.js tests/pagination.test.js tests/watchlist-status.test.js tests/faction-share.test.js tests/mobile.test.js tests/night-ui.test.js tests/pda-startup-diagnostic.test.js tests/browser-module.test.js"
   },
   "license": "PolyForm-Strict-1.0.0"
 }
