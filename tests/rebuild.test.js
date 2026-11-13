@@ -8,7 +8,7 @@ test('rebuild source parses and keeps the same appearance, data identifiers and 
  assert.doesNotThrow(()=>new Function(js));
  assert.match(js,/tc-aurora-drift/);
  assert.match(js,/tc-twinkle/);
- for(const key of ['combatWatchlist','combatSoloChain','combatFactionOrder_','combatCollapsed','combatAurora','apiKey'])assert.ok(js.includes(key),key);
+ for(const key of ['combatWatchlist','combatSoloChain','combatFactionOrder_','combatCollapsed','combatAurora','apiKey','key/info','faction/'])assert.ok(js.includes(key),key);
  for(const name of ['Targets','Solo Chain','Faction Chain','War'])assert.ok(js.includes(name),name);
  assert.match(js,/@run-at\s+document-end/);
  assert.doesNotMatch(js,/module\.exports/);
