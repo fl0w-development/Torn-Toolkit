@@ -592,14 +592,14 @@ function renderActivity(){
   sec('USUALLY OFFLINE'),txt(format(stats.offline)),
   sec('HOURLY ACTIVITY · LOCAL TIME'));
  var grid=h('div',{class:'tc-activity-hours'});
- stats.hours.forEach((hour,h)=>{
+ stats.hours.forEach((hour,hourIndex)=>{
   var shade='empty';
   if(hour.total>=3&&Object.keys(hour.days).length>=2){
    if(hour.Online/hour.total>=.65)shade='online';
    else if(hour.Offline/hour.total>=.65)shade='offline';
    else shade='mixed';
   }else if(hour.total)shade='limited';
-  var label=activityHour(h);
+  var label=activityHour(hourIndex);
   grid.append(h('div',{class:'tc-activity-hour tc-activity-'+shade,
    title:label+': '+hour.Online+' online, '+hour.Idle+' idle, '+hour.Offline+' offline ('+hour.total+' checks)'},
    h('span',{class:'tc-activity-label'},label),
