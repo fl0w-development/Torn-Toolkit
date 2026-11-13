@@ -26,6 +26,8 @@ class E{
  addEventListener(k,fn){this.events[k]=fn}
  appendChild(n){n.parentElement=this;this.children.push(n);if(this.tagName==='select' && n.tagName==='option' && this.children.length===1)this.value=n.attrs.value||n.textContent;return n}
  append(){Array.from(arguments).forEach(n=>this.appendChild(n))}
+ prepend(){Array.from(arguments).reverse().forEach(n=>{n.parentElement=this;this.children.unshift(n)})}
+ closest(query){return null}
  insertBefore(n,sibling){n.parentElement=this;this.children.unshift(n)}
  replaceChildren(){this.children=[];Array.from(arguments).forEach(n=>{if(n instanceof E)this.appendChild(n)})}
  querySelector(q){const target=q.replace('#','');return this.querySelectorAll(q)[0]||null}
@@ -34,17 +36,20 @@ class E{
  get firstChild(){return this.children[0]||null}
 }
 class URLStub{constructor(){this.pathname='/index.php';this.searchParams={get:()=>null}}}
-function simulate(saved){
+function simulate(saved,withWrapper=false){
  const body=new E('body'),head=new E('head');
+ const wrapper=new E('div');wrapper.className='content-wrapper';
+ if(withWrapper){body.appendChild(new E('header'));body.appendChild(wrapper)}
  const doc={body,head,documentElement:new E('html'),readyState:'complete',
   createElement:x=>new E(x),createTextNode:x=>new E('#text',x),
   getElementById:id=>body.querySelector('#'+id)||head.querySelector('#'+id),
+  querySelector:q=>q==='.content-wrapper'&&withWrapper?wrapper:null,
   addEventListener:()=>{}};
  const localStorage={getItem:key=>Object.hasOwn(saved,key)?JSON.stringify(saved[key]):null,setItem:(k,v)=>{saved[k]=JSON.parse(v)},removeItem:k=>delete saved[k]};
  new Function('document','Node','URL','location','localStorage','GM_getValue','GM_setValue','GM_deleteValue','setInterval','setTimeout',js)(
   doc,E,URLStub,{href:'https://www.torn.com/index.php'},localStorage,undefined,undefined,undefined,()=>0,()=>0
  );
- return {body,doc};
+ return {body,doc,wrapper};
 }
 test('actual rebuild creates aurora panel and four tabs without existing data',()=>{
  const {body}=simulate({});
@@ -60,4 +65,13 @@ test('rebuild renders existing watchlist and chain data without deleting them',(
  assert.ok(body.querySelector('#tc-root'),'panel should show with legacy stored items');
  assert.ok(body.querySelector('#tc-root').textContent.includes('Known target'),'existing watchlist should render');
  assert.equal(saved.tt_combatSoloChain[0],'123');
+});
+
+test('restores original panel position inside Torn content wrapper (not before site header)',()=>{
+ const {body,wrapper}=simulate({},true);
+ const panel=body.querySelector('#tc-root');
+ assert.ok(panel,'Toolkit root should exist');
+ assert.equal(panel.parentElement,wrapper,'Toolkit must be mounted into original content wrapper');
+ assert.equal(body.children[0].tagName,'header','Torn website header should remain first');
+ assert.equal(wrapper.children[0],panel,'Toolkit should lead content without preceding entire page');
 });
